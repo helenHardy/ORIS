@@ -12,6 +12,12 @@ export default function PurchaseModal({ onClose, onSave, isSaving, initialData, 
     const [items, setItems] = useState(initialData?.items || [])
     const [searchTerm, setSearchTerm] = useState('')
     const [showProductSearch, setShowProductSearch] = useState(false)
+    const [isCredit, setIsCredit] = useState(initialData?.is_credit || false)
+    const [initialPayment, setInitialPayment] = useState(0)
+    const [dueDate, setDueDate] = useState(initialData?.due_date || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0])
+    const [paymentMethod, setPaymentMethod] = useState(initialData?.payment_method || 'Efectivo')
+    const [amountCash, setAmountCash] = useState(initialData?.amount_cash || 0)
+    const [amountQr, setAmountQr] = useState(initialData?.amount_qr || 0)
     const [error, setError] = useState(null)
 
     useEffect(() => {
@@ -113,8 +119,10 @@ export default function PurchaseModal({ onClose, onSave, isSaving, initialData, 
     const handleSubmit = (e) => {
         e.preventDefault()
         if (!selectedBranch) return setError('Seleccione la sucursal de destino.')
-        if (!selectedCashBoxId && items.length > 0) return setError('Seleccione una caja para procesar el pago.')
+        if (!isCredit && !selectedCashBoxId && items.length > 0) return setError('Seleccione una caja para procesar el pago al contado.')
+        if (isCredit && initialPayment > 0 && !selectedCashBoxId) return setError('Seleccione una caja para procesar el abono inicial.')
         if (items.length === 0) return setError('Debe agregar al menos un producto a la compra.')
+        if (isCredit && initialPayment > total) return setError('El pago inicial no puede ser mayor al total.')
 
         const processedItems = items.map(item => {
             const finalQuantity = item.is_pack ? (item.quantity * item.units_per_pack) : item.quantity
@@ -125,8 +133,15 @@ export default function PurchaseModal({ onClose, onSave, isSaving, initialData, 
         onSave({
             supplier_id: selectedSupplier || null,
             branch_id: selectedBranch,
-            cash_box_id: selectedCashBoxId || null,
+            cash_box_id: (isCredit && initialPayment === 0) ? null : selectedCashBoxId,
             total,
+            is_credit: isCredit,
+            amount_paid: isCredit ? initialPayment : total,
+            amount_cash: paymentMethod === 'Mixto' ? amountCash : (paymentMethod === 'Efectivo' ? (isCredit ? initialPayment : total) : 0),
+            amount_qr: paymentMethod === 'Mixto' ? amountQr : (paymentMethod === 'QR' ? (isCredit ? initialPayment : total) : 0),
+            due_date: isCredit ? dueDate : null,
+            payment_status: isCredit ? (initialPayment === 0 ? 'pending' : (initialPayment >= total ? 'paid' : 'partial')) : 'paid',
+            payment_method: paymentMethod,
             items: processedItems
         })
     }
@@ -193,16 +208,172 @@ export default function PurchaseModal({ onClose, onSave, isSaving, initialData, 
                                 </div>
                             </div>
                             <div>
-                                <h3 style={sectionTitleStyle}><Wallet size={18} /> Caja de Pago</h3>
-                                <div style={{ position: 'relative' }}>
-                                    <Wallet size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', opacity: 0.4 }} />
-                                    <select style={{ ...inputStyle, paddingLeft: '2.5rem' }} value={selectedCashBoxId} onChange={(e) => setSelectedCashBoxId(e.target.value)} disabled={readOnly} required>
+                                <h3 style={sectionTitleStyle}><Wallet size={18} /> Metodo de Pago</h3>
+                                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                    <button
+                                        type="button"
+                                        onClick={() => setIsCredit(false)}
+                                        style={{
+                                            flex: 1,
+                                            padding: '0.6rem',
+                                            borderRadius: '10px',
+                                            border: '1px solid ' + (isCredit ? 'hsl(var(--border) / 0.6)' : 'hsl(var(--primary))'),
+                                            backgroundColor: isCredit ? 'transparent' : 'hsl(var(--primary) / 0.1)',
+                                            color: isCredit ? 'inherit' : 'hsl(var(--primary))',
+                                            fontWeight: '700',
+                                            fontSize: '0.8rem',
+                                            transition: 'all 0.2s'
+                                        }}
+                                        disabled={readOnly}
+                                    >
+                                        EFECTIVO
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setIsCredit(true)}
+                                        style={{
+                                            flex: 1,
+                                            padding: '0.6rem',
+                                            borderRadius: '10px',
+                                            border: '1px solid ' + (!isCredit ? 'hsl(var(--border) / 0.6)' : 'hsl(var(--primary))'),
+                                            backgroundColor: !isCredit ? 'transparent' : 'hsl(var(--primary) / 0.1)',
+                                            color: !isCredit ? 'inherit' : 'hsl(var(--primary))',
+                                            fontWeight: '700',
+                                            fontSize: '0.8rem',
+                                            transition: 'all 0.2s'
+                                        }}
+                                        disabled={readOnly}
+                                    >
+                                        CRÉDITO
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        {isCredit && (
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1.5rem', padding: '1.5rem', backgroundColor: 'hsl(var(--primary) / 0.05)', borderRadius: '16px', border: '1px solid hsl(var(--primary) / 0.2)', marginTop: '-1rem' }}>
+                                <div>
+                                    <h3 style={sectionTitleStyle}>Abono Inicial</h3>
+                                    <input
+                                        type="number"
+                                        step="0.01"
+                                        style={inputStyle}
+                                        placeholder="0.00"
+                                        value={initialPayment}
+                                        onChange={(e) => {
+                                            const val = parseFloat(e.target.value) || 0
+                                            setInitialPayment(val)
+                                            if (paymentMethod === 'Mixto') {
+                                                setAmountCash(val)
+                                                setAmountQr(0)
+                                            }
+                                        }}
+                                        disabled={readOnly}
+                                    />
+                                </div>
+                                <div>
+                                    <h3 style={sectionTitleStyle}>Fecha de Vencimiento</h3>
+                                    <input
+                                        type="date"
+                                        style={inputStyle}
+                                        value={dueDate}
+                                        onChange={(e) => setDueDate(e.target.value)}
+                                        disabled={readOnly}
+                                    />
+                                </div>
+                                <div>
+                                    <h3 style={sectionTitleStyle}>Método de Abono</h3>
+                                    <select style={inputStyle} value={paymentMethod} onChange={(e) => {
+                                        setPaymentMethod(e.target.value)
+                                        if (e.target.value === 'Mixto') {
+                                            setAmountCash(initialPayment)
+                                            setAmountQr(0)
+                                        }
+                                    }} disabled={readOnly}>
+                                        <option value="Efectivo">Efectivo</option>
+                                        <option value="QR">Transferencia / QR</option>
+                                        <option value="Mixto">Mixto (Efect+QR)</option>
+                                    </select>
+                                </div>
+
+                                {paymentMethod === 'Mixto' && (
+                                    <div style={{ gridColumn: 'span 3', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', padding: '1rem', backgroundColor: 'hsl(var(--primary) / 0.1)', borderRadius: '12px' }}>
+                                        <div>
+                                            <label style={{ fontSize: '0.75rem', fontWeight: '800', opacity: 0.6 }}>MONTO EFECTIVO</label>
+                                            <input type="number" style={inputStyle} value={amountCash} onChange={(e) => {
+                                                const val = parseFloat(e.target.value) || 0
+                                                setAmountCash(val)
+                                                setAmountQr(Math.max(0, initialPayment - val))
+                                            }} />
+                                        </div>
+                                        <div>
+                                            <label style={{ fontSize: '0.75rem', fontWeight: '800', opacity: 0.6 }}>MONTO QR</label>
+                                            <input type="number" style={inputStyle} value={amountQr} onChange={(e) => {
+                                                const val = parseFloat(e.target.value) || 0
+                                                setAmountQr(val)
+                                                setAmountCash(Math.max(0, initialPayment - val))
+                                            }} />
+                                        </div>
+                                    </div>
+                                )}
+
+                                <div style={{ gridColumn: 'span 3' }}>
+                                    <h3 style={sectionTitleStyle}>Caja para Pago</h3>
+                                    <select style={inputStyle} value={selectedCashBoxId} onChange={(e) => setSelectedCashBoxId(e.target.value)} disabled={readOnly || initialPayment <= 0}>
+                                        <option value="">Seleccionar Caja...</option>
+                                        {cashBoxes.map(box => <option key={box.id} value={box.id}>{box.name}</option>)}
+                                    </select>
+                                </div>
+                            </div>
+                        )}
+
+                        {!isCredit && (
+                            <div style={{ display: 'grid', gridTemplateColumns: paymentMethod === 'Mixto' ? '1fr' : '1fr 1fr', gap: '1.5rem', padding: '1.5rem', backgroundColor: 'hsl(var(--secondary) / 0.05)', borderRadius: '16px', border: '1px solid hsl(var(--border) / 0.4)', marginTop: '-1rem' }}>
+                                <div>
+                                    <h3 style={sectionTitleStyle}>Método de Pago</h3>
+                                    <select style={inputStyle} value={paymentMethod} onChange={(e) => {
+                                        setPaymentMethod(e.target.value)
+                                        if (e.target.value === 'Mixto') {
+                                            setAmountCash(total)
+                                            setAmountQr(0)
+                                        }
+                                    }} disabled={readOnly}>
+                                        <option value="Efectivo">Efectivo</option>
+                                        <option value="QR">Transferencia / QR</option>
+                                        <option value="Mixto">Mixto (Efect+QR)</option>
+                                    </select>
+                                </div>
+
+                                {paymentMethod === 'Mixto' && (
+                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', padding: '1rem', backgroundColor: 'hsl(var(--secondary) / 0.1)', borderRadius: '12px' }}>
+                                        <div>
+                                            <label style={{ fontSize: '0.75rem', fontWeight: '800', opacity: 0.6 }}>MONTO EFECTIVO</label>
+                                            <input type="number" style={inputStyle} value={amountCash} onChange={(e) => {
+                                                const val = parseFloat(e.target.value) || 0
+                                                setAmountCash(val)
+                                                setAmountQr(Math.max(0, total - val))
+                                            }} />
+                                        </div>
+                                        <div>
+                                            <label style={{ fontSize: '0.75rem', fontWeight: '800', opacity: 0.6 }}>MONTO QR</label>
+                                            <input type="number" style={inputStyle} value={amountQr} onChange={(e) => {
+                                                const val = parseFloat(e.target.value) || 0
+                                                setAmountQr(val)
+                                                setAmountCash(Math.max(0, total - val))
+                                            }} />
+                                        </div>
+                                    </div>
+                                )}
+
+                                <div>
+                                    <h3 style={sectionTitleStyle}><Wallet size={18} /> Caja de Pago</h3>
+                                    <select style={inputStyle} value={selectedCashBoxId} onChange={(e) => setSelectedCashBoxId(e.target.value)} disabled={readOnly} required>
                                         <option value="">Seleccionar Caja...</option>
                                         {cashBoxes.map(box => <option key={box.id} value={box.id}>{box.name} (Saldo: {currencySymbol}{box.balance?.toFixed(2)})</option>)}
                                     </select>
                                 </div>
                             </div>
-                        </div>
+                        )}
 
                         <div>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
@@ -225,8 +396,8 @@ export default function PurchaseModal({ onClose, onSave, isSaving, initialData, 
                                                         <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
                                                             <div style={{ width: '40px', height: '40px', borderRadius: '8px', backgroundColor: 'hsl(var(--secondary) / 0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Package size={20} /></div>
                                                             <div style={{ flex: 1 }}>
-                                                                <p style={{ fontWeight: '800', fontSize: '0.9rem', margin: 0 }}>{p.name}</p>
-                                                                <p style={{ fontSize: '0.7rem', opacity: 0.5, margin: 0 }}>SKU: {p.sku || '---'}</p>
+                                                                 <p style={{ fontWeight: '800', fontSize: '0.9rem', margin: 0 }}>{p.name}</p>
+                                                                 <p style={{ fontSize: '0.7rem', opacity: 0.5, margin: 0 }}>SKU: {p.sku || '---'}</p>
                                                             </div>
                                                             <ChevronRight size={16} opacity={0.3} />
                                                         </div>

@@ -49,6 +49,34 @@ export const inventoryService = {
         if (error) throw error
     },
 
+    // SUBCATEGORIES
+    async getSubcategories(categoryId) {
+        let query = supabase.from('subcategories').select('*').order('name')
+        if (categoryId) {
+            query = query.eq('category_id', categoryId)
+        }
+        const { data, error } = await query
+        if (error) throw error
+        return data
+    },
+
+    async createSubcategory(name, categoryId) {
+        const { data, error } = await supabase.from('subcategories').insert([{ name, category_id: categoryId }]).select().single()
+        if (error) throw error
+        return data
+    },
+
+    async updateSubcategory(id, name, categoryId) {
+        const { data, error } = await supabase.from('subcategories').update({ name, category_id: categoryId }).eq('id', id).select().single()
+        if (error) throw error
+        return data
+    },
+
+    async deleteSubcategory(id) {
+        const { error } = await supabase.from('subcategories').delete().eq('id', id)
+        if (error) throw error
+    },
+
     // MODELS
     async getModels(brandId) {
         let query = supabase.from('models').select('*').order('name')

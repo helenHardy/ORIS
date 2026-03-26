@@ -16,7 +16,7 @@ import {
 import { inventoryService } from '../services/inventoryService'
 
 export default function Classifications() {
-    const [activeTab, setActiveTab] = useState('categories') // 'categories', 'brands', 'models'
+    const [activeTab, setActiveTab] = useState('categories') // 'categories', 'subcategories', 'brands', 'models'
     const [loading, setLoading] = useState(false)
     const [items, setItems] = useState([])
     const [searchTerm, setSearchTerm] = useState('')
@@ -24,16 +24,20 @@ export default function Classifications() {
     const [editingItem, setEditingItem] = useState(null)
     const [isSaving, setIsSaving] = useState(false)
 
-    // Specific data for Models view
+    // Specific data for Models and Subcategories view
     const [brands, setBrands] = useState([])
+    const [categories, setCategories] = useState([])
 
     // Form data
-    const [formData, setFormData] = useState({ name: '', brand_id: '' })
+    const [formData, setFormData] = useState({ name: '', brand_id: '', category_id: '' })
 
     useEffect(() => {
         fetchData()
         if (activeTab === 'models') {
             fetchBrands()
+        }
+        if (activeTab === 'subcategories') {
+            fetchCategories()
         }
     }, [activeTab])
 
@@ -43,14 +47,13 @@ export default function Classifications() {
             let data = []
             if (activeTab === 'categories') {
                 data = await inventoryService.getCategories()
+            } else if (activeTab === 'subcategories') {
+                data = await inventoryService.getSubcategories()
+                fetchCategories()
             } else if (activeTab === 'brands') {
                 data = await inventoryService.getBrands()
             } else if (activeTab === 'models') {
                 data = await inventoryService.getModels()
-                // For models, we might want to join brands manually if the service doesn't return joined data
-                // Or we update the service. The current service returns brand_id.
-                // Let's assume we need to map brand names or fetch them.
-                // Re-fetching brands to map names if needed.
             }
             setItems(data || [])
         } catch (error) {
@@ -70,11 +73,21 @@ export default function Classifications() {
         }
     }
 
+    const fetchCategories = async () => {
+        try {
+            const data = await inventoryService.getCategories()
+            setCategories(data || [])
+        } catch (error) {
+            console.error('Error fetching categories:', error)
+        }
+    }
+
     const handleOpenModal = (item = null) => {
         setEditingItem(item)
         setFormData({
             name: item?.name || '',
-            brand_id: item?.brand_id || (brands.length > 0 ? brands[0].id : '')
+            brand_id: item?.brand_id || (brands.length > 0 ? brands[0].id : ''),
+            category_id: item?.category_id || (categories.length > 0 ? categories[0].id : '')
         })
         setIsModalOpen(true)
     }
@@ -88,6 +101,9 @@ export default function Classifications() {
             if (activeTab === 'categories') {
                 if (editingItem) await inventoryService.updateCategory(editingItem.id, formData.name)
                 else await inventoryService.createCategory(formData.name)
+            } else if (activeTab === 'subcategories') {
+                if (editingItem) await inventoryService.updateSubcategory(editingItem.id, formData.name, formData.category_id)
+                else await inventoryService.createSubcategory(formData.name, formData.category_id)
             } else if (activeTab === 'brands') {
                 if (editingItem) await inventoryService.updateBrand(editingItem.id, formData.name)
                 else await inventoryService.createBrand(formData.name)
@@ -110,6 +126,7 @@ export default function Classifications() {
         try {
             setLoading(true)
             if (activeTab === 'categories') await inventoryService.deleteCategory(id)
+            else if (activeTab === 'subcategories') await inventoryService.deleteSubcategory(id)
             else if (activeTab === 'brands') await inventoryService.deleteBrand(id)
             else if (activeTab === 'models') await inventoryService.deleteModel(id)
             fetchData()
@@ -129,6 +146,11 @@ export default function Classifications() {
     const getBrandName = (brandId) => {
         const brand = brands.find(b => b.id === brandId)
         return brand ? brand.name : 'Desconocida'
+    }
+
+    const getCategoryName = (categoryId) => {
+        const category = categories.find(c => c.id === categoryId)
+        return category ? category.name : 'Desconocida'
     }
 
     return (
@@ -153,6 +175,7 @@ export default function Classifications() {
             <div style={{ display: 'flex', gap: '1rem', borderBottom: '1px solid hsl(var(--border) / 0.5)', paddingBottom: '0.5rem' }}>
                 {[
                     { id: 'categories', label: 'Categorías', icon: <Tags size={18} /> },
+                    { id: 'subcategories', label: 'Subcategorías', icon: <Layers size={18} /> },
                     { id: 'brands', label: 'Marcas', icon: <Building2 size={18} /> },
                     { id: 'models', label: 'Modelos', icon: <Box size={18} /> }
                 ].map(tab => (
@@ -189,7 +212,7 @@ export default function Classifications() {
                     <Search size={20} style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', opacity: 0.4 }} />
                     <input
                         type="text"
-                        placeholder={`Buscar ${activeTab === 'categories' ? 'categorías' : activeTab === 'brands' ? 'marcas' : 'modelos'}...`}
+                        placeholder={`Buscar ${activeTab === 'categories' ? 'categorías' : activeTab === 'subcategories' ? 'subcategorías' : activeTab === 'brands' ? 'marcas' : 'modelos'}...`}
                         style={{ width: '100%', padding: '0.85rem 1rem 0.85rem 2.8rem', backgroundColor: 'hsl(var(--secondary) / 0.4)', borderRadius: '14px', border: 'none', fontSize: '0.95rem', outline: 'none' }}
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
@@ -215,6 +238,11 @@ export default function Classifications() {
                                             {getBrandName(item.brand_id)}
                                         </span>
                                     )}
+                                    {activeTab === 'subcategories' && (
+                                        <span style={{ fontSize: '0.75rem', opacity: 0.6, display: 'block', marginTop: '0.25rem' }}>
+                                            {getCategoryName(item.category_id)}
+                                        </span>
+                                    )}
                                 </div>
                                 <div style={{ display: 'flex', gap: '0.5rem' }}>
                                     <button onClick={() => handleOpenModal(item)} className="btn hover:bg-secondary" style={{ padding: '0.5rem', borderRadius: '8px', color: 'hsl(var(--primary))' }}>
@@ -236,7 +264,7 @@ export default function Classifications() {
                     <div className="card shadow-2xl" style={{ width: '100%', maxWidth: '400px', padding: '2rem', borderRadius: '24px', backgroundColor: 'hsl(var(--background))' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
                             <h2 style={{ fontSize: '1.5rem', fontWeight: '800', margin: 0 }}>
-                                {editingItem ? 'Editar' : 'Nuevo'} {activeTab === 'categories' ? 'Categoría' : activeTab === 'brands' ? 'Marca' : 'Modelo'}
+                                {editingItem ? 'Editar' : 'Nuevo'} {activeTab === 'categories' ? 'Categoría' : activeTab === 'subcategories' ? 'Subcategoría' : activeTab === 'brands' ? 'Marca' : 'Modelo'}
                             </h2>
                             <button onClick={() => setIsModalOpen(false)} className="btn" style={{ padding: '0.5rem', borderRadius: '50%' }}><X size={20} /></button>
                         </div>
@@ -265,6 +293,22 @@ export default function Classifications() {
                                         <option value="">Seleccionar Marca</option>
                                         {brands.map(b => (
                                             <option key={b.id} value={b.id}>{b.name}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                            )}
+
+                            {activeTab === 'subcategories' && (
+                                <div>
+                                    <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '600', fontSize: '0.9rem' }}>Categoría Principal</label>
+                                    <select
+                                        style={{ width: '100%', padding: '0.85rem 1rem', borderRadius: '12px', border: '1px solid hsl(var(--border))', fontSize: '1rem' }}
+                                        value={formData.category_id}
+                                        onChange={(e) => setFormData({ ...formData, category_id: e.target.value })}
+                                    >
+                                        <option value="">Seleccionar Categoría</option>
+                                        {categories.map(c => (
+                                            <option key={c.id} value={c.id}>{c.name}</option>
                                         ))}
                                     </select>
                                 </div>

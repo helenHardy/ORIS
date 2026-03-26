@@ -25,6 +25,7 @@ export default function ProductGrid({ searchTerm, branchId, category, onAddToCar
                 .select(`
                     *,
                     category:categories(name),
+                    subcategory:subcategories(name),
                     brand:brands(name),
                     model:models(name),
                     settings:product_branch_settings!inner(*),

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { Plus, Search, ClipboardList, RefreshCw, AlertTriangle, Truck, Building2, Calendar, User, Eye, Edit2, Trash2, ShoppingBag, ArrowUpRight, TrendingUp, CheckCircle } from 'lucide-react'
+import { Plus, Search, ClipboardList, RefreshCw, AlertTriangle, Truck, Building2, Calendar, User, Eye, Edit2, Trash2, ShoppingBag, ArrowUpRight, TrendingUp, CheckCircle, X, Loader2, Save } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import PurchaseModal from '../components/inventory/PurchaseModal'
 
@@ -29,7 +29,9 @@ export default function Purchases() {
     }
 
     const [isModalOpen, setIsModalOpen] = useState(false)
+    const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false)
     const [editingPurchase, setEditingPurchase] = useState(null)
+    const [selectedPurchaseForPayment, setSelectedPurchaseForPayment] = useState(null)
 
     // Metrics state
     const [stats, setStats] = useState({
@@ -239,7 +241,14 @@ export default function Purchases() {
                         branch_id: header.branch_id,
                         total: header.total,
                         user_id: user?.id,
-                        cash_box_id: header.cash_box_id || null
+                        cash_box_id: header.cash_box_id || null,
+                        is_credit: header.is_credit,
+                        amount_paid: header.amount_paid,
+                        amount_cash: header.amount_cash,
+                        amount_qr: header.amount_qr,
+                        due_date: header.due_date,
+                        payment_status: header.payment_status,
+                        payment_method: header.payment_method
                     })
                     .eq('id', targetPurchaseId)
                 if (upError) throw upError
@@ -251,7 +260,14 @@ export default function Purchases() {
                         branch_id: header.branch_id,
                         cash_box_id: header.cash_box_id,
                         total: header.total,
-                        user_id: user?.id
+                        user_id: user?.id,
+                        is_credit: header.is_credit,
+                        amount_paid: header.amount_paid,
+                        amount_cash: header.amount_cash,
+                        amount_qr: header.amount_qr,
+                        due_date: header.due_date,
+                        payment_status: header.payment_status,
+                        payment_method: header.payment_method
                     }])
                     .select()
                     .single()
@@ -285,6 +301,53 @@ export default function Purchases() {
         }
     }
 
+    const handleRecordPayment = async (paymentData) => {
+        try {
+            setIsSaving(true)
+            const { data: { user } } = await supabase.auth.getUser()
+            
+            // 1. Insert payment record
+            const { error: pError } = await supabase
+                .from('purchase_payments')
+                .insert([{
+                    purchase_id: selectedPurchaseForPayment.id,
+                    amount: paymentData.amount,
+                    amount_cash: paymentData.amount_cash,
+                    amount_qr: paymentData.amount_qr,
+                    payment_method: paymentData.payment_method,
+                    cash_box_id: paymentData.cash_box_id,
+                    notes: paymentData.notes,
+                    user_id: user?.id
+                }])
+            
+            if (pError) throw pError
+
+            // 2. Update purchase amount_paid and status
+            const newAmountPaid = (selectedPurchaseForPayment.amount_paid || 0) + paymentData.amount
+            const newStatus = newAmountPaid >= (selectedPurchaseForPayment.total - 0.01) ? 'paid' : 'partial'
+
+            const { error: uError } = await supabase
+                .from('purchases')
+                .update({ 
+                    amount_paid: newAmountPaid,
+                    payment_status: newStatus 
+                })
+                .eq('id', selectedPurchaseForPayment.id)
+
+            if (uError) throw uError
+
+            setIsPaymentModalOpen(false)
+            setSelectedPurchaseForPayment(null)
+            fetchPurchases()
+            showToast('Abono registrado con éxito.')
+        } catch (err) {
+            console.error('Error recording payment:', err)
+            showToast('Error al registrar abono: ' + err.message, 'error')
+        } finally {
+            setIsSaving(false)
+        }
+    }
+
     const filteredPurchases = purchases.filter(p =>
         (p.suppliers?.name || 'Sin Proveedor').toLowerCase().includes(searchTerm.toLowerCase()) ||
         p.purchase_number?.toString().includes(searchTerm) ||
@@ -306,6 +369,20 @@ export default function Purchases() {
                     readOnly={isReadOnly}
                     onBranchChange={fetchCashBoxes}
                     cashBoxes={cashBoxes}
+                />
+            )}
+
+            {isPaymentModalOpen && selectedPurchaseForPayment && (
+                <PurchasePaymentModal
+                    purchase={selectedPurchaseForPayment}
+                    isSaving={isSaving}
+                    currencySymbol={currencySymbol}
+                    cashBoxes={cashBoxes}
+                    onClose={() => {
+                        setIsPaymentModalOpen(false)
+                        setSelectedPurchaseForPayment(null)
+                    }}
+                    onSave={handleRecordPayment}
                 />
             )}
 
@@ -388,7 +465,7 @@ export default function Purchases() {
                                 border: 'none',
                                 fontSize: '0.9rem',
                                 outline: 'none'
-                            }}
+                             }}
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
                         />
@@ -403,7 +480,8 @@ export default function Purchases() {
                                 <th style={{ padding: '1.25rem 1.5rem', fontSize: '0.75rem', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em', opacity: 0.5 }}>Proveedor</th>
                                 <th style={{ padding: '1.25rem 1.5rem', fontSize: '0.75rem', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em', opacity: 0.5 }}>Sucursal / Usuario</th>
                                 <th style={{ padding: '1.25rem 1.5rem', fontSize: '0.75rem', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em', opacity: 0.5 }}>Fecha</th>
-                                <th style={{ padding: '1.25rem 1.5rem', fontSize: '0.75rem', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em', opacity: 0.5 }}>Total Bruto</th>
+                                <th style={{ padding: '1.25rem 1.5rem', fontSize: '0.75rem', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em', opacity: 0.5 }}>Total</th>
+                                <th style={{ padding: '1.25rem 1.5rem', fontSize: '0.75rem', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em', opacity: 0.5 }}>Estado / Saldo</th>
                                 <th style={{ padding: '1.25rem 1.5rem', fontSize: '0.75rem', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em', opacity: 0.5, textAlign: 'right' }}>Acciones</th>
                             </tr>
                         </thead>
@@ -475,6 +553,36 @@ export default function Purchases() {
                                             </span>
                                         </td>
                                         <td style={{ padding: '1.25rem 1.5rem' }}>
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                                {p.is_credit ? (
+                                                    <>
+                                                        <span style={{
+                                                            fontSize: '0.7rem',
+                                                            fontWeight: '900',
+                                                            padding: '2px 8px',
+                                                            borderRadius: '99px',
+                                                            width: 'fit-content',
+                                                            backgroundColor: p.payment_status === 'paid' ? 'hsl(142 76% 36% / 0.1)' : (p.payment_status === 'partial' ? 'hsl(48 96% 53% / 0.1)' : 'hsl(var(--destructive) / 0.1)'),
+                                                            color: p.payment_status === 'paid' ? 'hsl(142 76% 36%)' : (p.payment_status === 'partial' ? 'hsl(48 96% 53%)' : 'hsl(var(--destructive))'),
+                                                            textTransform: 'uppercase'
+                                                        }}>
+                                                            {p.payment_status === 'paid' ? 'Pagado' : (p.payment_status === 'partial' ? 'Parcial' : 'Pendiente')}
+                                                        </span>
+                                                        <span style={{ fontSize: '0.8rem', fontWeight: '700', opacity: 0.6 }}>
+                                                            Saldo: {currencySymbol}{(p.total - p.amount_paid).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                                        </span>
+                                                        {p.payment_status !== 'paid' && p.due_date && (
+                                                            <span style={{ fontSize: '0.7rem', fontWeight: '500', color: new Date(p.due_date) < new Date() ? 'hsl(var(--destructive))' : 'inherit', opacity: 0.5 }}>
+                                                                Vence: {new Date(p.due_date).toLocaleDateString()}
+                                                            </span>
+                                                        )}
+                                                    </>
+                                                ) : (
+                                                    <span style={{ fontSize: '0.7rem', fontWeight: '700', color: 'hsl(var(--primary))', opacity: 0.6 }}>CONTADO</span>
+                                                )}
+                                            </div>
+                                        </td>
+                                        <td style={{ padding: '1.25rem 1.5rem' }}>
                                             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', alignItems: 'center' }}>
                                                 {/* Admin: Permissions Control */}
                                                 {isAdmin && (
@@ -518,6 +626,17 @@ export default function Purchases() {
                                                             <Trash2 size={14} />
                                                         </button>
                                                     </div>
+                                                )}
+
+                                                {p.is_credit && p.payment_status !== 'paid' && (
+                                                    <button
+                                                        onClick={() => { setSelectedPurchaseForPayment(p); fetchCashBoxes(p.branch_id); setIsPaymentModalOpen(true); }}
+                                                        className="btn"
+                                                        style={{ padding: '0.5rem 0.75rem', borderRadius: '10px', backgroundColor: 'hsl(var(--primary) / 0.1)', color: 'hsl(var(--primary))', fontSize: '0.75rem', fontWeight: '800', gap: '4px' }}
+                                                        title="Registrar Abono"
+                                                    >
+                                                        <ArrowUpRight size={14} /> ABONAR
+                                                    </button>
                                                 )}
 
                                                 {(isAdmin || p.can_edit) ? (
@@ -588,6 +707,163 @@ export default function Purchases() {
                     to { transform: translateX(0); opacity: 1; }
                 }
             `}</style>
+        </div>
+    )
+}
+
+function PurchasePaymentModal({ purchase, isSaving, currencySymbol, cashBoxes, onClose, onSave }) {
+    const balance = purchase.total - (purchase.amount_paid || 0)
+    const [amount, setAmount] = useState(balance)
+    const [amountCash, setAmountCash] = useState(balance)
+    const [amountQr, setAmountQr] = useState(0)
+    const [paymentMethod, setPaymentMethod] = useState('Efectivo')
+    const [selectedCashBoxId, setSelectedCashBoxId] = useState('')
+    const [notes, setNotes] = useState('')
+
+    useEffect(() => {
+        if (cashBoxes.length > 0 && !selectedCashBoxId) {
+            setSelectedCashBoxId(cashBoxes[0].id)
+        }
+    }, [cashBoxes])
+
+    const handleSubmit = (e) => {
+        e.preventDefault()
+        if (amount <= 0) return alert('El monto debe ser mayor a 0.')
+        if (amount > balance + 0.01) return alert('El monto no puede superar el saldo pendiente.')
+        if (!selectedCashBoxId) return alert('Seleccione una caja para el egreso.')
+
+        onSave({
+            amount,
+            amount_cash: paymentMethod === 'Mixto' ? amountCash : (paymentMethod === 'Efectivo' ? amount : 0),
+            amount_qr: paymentMethod === 'Mixto' ? amountQr : (paymentMethod === 'QR' ? amount : 0),
+            payment_method: paymentMethod,
+            cash_box_id: selectedCashBoxId,
+            notes
+        })
+    }
+
+    return (
+        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 110, padding: '1rem' }}>
+            <div className="card shadow-2xl" style={{ width: '100%', maxWidth: '500px', padding: 0, borderRadius: '20px', overflow: 'hidden', backgroundColor: 'hsl(var(--background))' }}>
+                <div style={{ padding: '1.5rem', borderBottom: '1px solid hsl(var(--border) / 0.6)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'hsl(var(--primary) / 0.05)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                        <div style={{ padding: '0.5rem', backgroundColor: 'hsl(var(--primary) / 0.1)', color: 'hsl(var(--primary))', borderRadius: '10px' }}><ArrowUpRight size={20} /></div>
+                        <div>
+                            <h3 style={{ fontSize: '1.1rem', fontWeight: '800', margin: 0 }}>Registrar Abono</h3>
+                            <p style={{ fontSize: '0.75rem', fontWeight: '500', opacity: 0.5, margin: 0 }}>Factura #{purchase.purchase_number || purchase.id.toString().slice(0, 8)}</p>
+                        </div>
+                    </div>
+                    <button onClick={onClose} className="btn" style={{ padding: '0.4rem', borderRadius: '50%' }}><X size={18} /></button>
+                </div>
+
+                <form onSubmit={handleSubmit} style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                    <div style={{ backgroundColor: 'hsl(var(--secondary) / 0.3)', padding: '1rem', borderRadius: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div>
+                            <p style={{ fontSize: '0.75rem', fontWeight: '700', opacity: 0.5, margin: 0 }}>SALDO PENDIENTE</p>
+                            <p style={{ fontSize: '1.25rem', fontWeight: '900', margin: 0, color: 'hsl(var(--destructive))' }}>{currencySymbol}{balance.toFixed(2)}</p>
+                        </div>
+                        <div style={{ textAlign: 'right' }}>
+                            <p style={{ fontSize: '0.75rem', fontWeight: '700', opacity: 0.5, margin: 0 }}>TOTAL FACTURA</p>
+                            <p style={{ fontSize: '1rem', fontWeight: '700', margin: 0 }}>{currencySymbol}{purchase.total.toFixed(2)}</p>
+                        </div>
+                    </div>
+
+                    <div>
+                        <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '700', marginBottom: '0.5rem', opacity: 0.7 }}>Monto del Abono</label>
+                        <input
+                            type="number"
+                            step="0.01"
+                            style={{ width: '100%', padding: '0.75rem', borderRadius: '10px', border: '1px solid hsl(var(--border))', fontSize: '1rem', fontWeight: '800' }}
+                            value={amount}
+                            onChange={(e) => {
+                                const val = parseFloat(e.target.value) || 0
+                                setAmount(val)
+                                if (paymentMethod === 'Mixto') {
+                                    setAmountCash(val)
+                                    setAmountQr(0)
+                                }
+                            }}
+                            autoFocus
+                            required
+                        />
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                        <div>
+                            <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '700', marginBottom: '0.5rem', opacity: 0.7 }}>Método de Pago</label>
+                            <select
+                                style={{ width: '100%', padding: '0.75rem', borderRadius: '10px', border: '1px solid hsl(var(--border))', fontSize: '0.9rem' }}
+                                value={paymentMethod}
+                                onChange={(e) => {
+                                    setPaymentMethod(e.target.value)
+                                    if (e.target.value === 'Mixto') {
+                                        setAmountCash(amount)
+                                        setAmountQr(0)
+                                    }
+                                }}
+                                required
+                            >
+                                <option value="Efectivo">Efectivo</option>
+                                <option value="QR">Transferencia / QR</option>
+                                <option value="Mixto">Mixto (Dividido)</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '700', marginBottom: '0.5rem', opacity: 0.7 }}>Caja de Egreso</label>
+                            <select
+                                style={{ width: '100%', padding: '0.75rem', borderRadius: '10px', border: '1px solid hsl(var(--border))', fontSize: '0.9rem' }}
+                                value={selectedCashBoxId}
+                                onChange={(e) => setSelectedCashBoxId(e.target.value)}
+                                required
+                            >
+                                <option value="">Seleccionar Caja...</option>
+                                {cashBoxes.map(box => <option key={box.id} value={box.id}>{box.name} (Saldo: {currencySymbol}{box.balance?.toFixed(2)})</option>)}
+                            </select>
+                        </div>
+                    </div>
+
+                    {paymentMethod === 'Mixto' && (
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', padding: '1rem', backgroundColor: 'hsl(var(--primary) / 0.05)', borderRadius: '12px', border: '1px solid hsl(var(--primary) / 0.1)' }}>
+                            <div>
+                                <label style={{ fontSize: '0.7rem', fontWeight: '800', opacity: 0.6 }}>EFECTIVO</label>
+                                <input type="number" style={{ width: '100%', padding: '0.5rem', borderRadius: '8px', border: '1px solid hsl(var(--border))' }} value={amountCash} onChange={(e) => {
+                                    const val = parseFloat(e.target.value) || 0
+                                    setAmountCash(val)
+                                    setAmountQr(Math.max(0, amount - val))
+                                }} />
+                            </div>
+                            <div>
+                                <label style={{ fontSize: '0.7rem', fontWeight: '800', opacity: 0.6 }}>QR / TRANSF.</label>
+                                <input type="number" style={{ width: '100%', padding: '0.5rem', borderRadius: '8px', border: '1px solid hsl(var(--border))' }} value={amountQr} onChange={(e) => {
+                                    const val = parseFloat(e.target.value) || 0
+                                    setAmountQr(val)
+                                    setAmountCash(Math.max(0, amount - val))
+                                }} />
+                            </div>
+                        </div>
+                    )}
+
+                    <div>
+                        <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '700', marginBottom: '0.5rem', opacity: 0.7 }}>Notas (Opcional)</label>
+                        <textarea
+                            style={{ width: '100%', padding: '0.75rem', borderRadius: '10px', border: '1px solid hsl(var(--border))', fontSize: '0.9rem', resize: 'none' }}
+                            rows="2"
+                            placeholder="Detalles sobre el pago..."
+                            value={notes}
+                            onChange={(e) => setNotes(e.target.value)}
+                        />
+                    </div>
+
+                    <button
+                        type="submit"
+                        className="btn btn-primary"
+                        style={{ padding: '1rem', borderRadius: '12px', fontWeight: '800', marginTop: '0.5rem', gap: '0.5rem' }}
+                        disabled={isSaving}
+                    >
+                        {isSaving ? <><Loader2 className="animate-spin" /> PROCESANDO...</> : <><Save /> REGISTRAR ABONO</>}
+                    </button>
+                </form>
+            </div>
         </div>
     )
 }

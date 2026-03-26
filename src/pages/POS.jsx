@@ -191,6 +191,12 @@ export default function POS() {
         }))
     }
 
+    const setPrice = (productId, newPrice) => {
+        setCart(prev => prev.map(item =>
+            item.id === productId ? { ...item, price: Math.max(0, newPrice) } : item
+        ))
+    }
+
     const handleCheckout = async (checkoutData) => {
         try {
             if (!selectedBranchId) return alert('Seleccione una sucursal')
@@ -451,6 +457,7 @@ export default function POS() {
                         onRemove={removeFromCart}
                         onUpdateQuantity={updateQuantity}
                         onSetQuantity={setQuantity}
+                        onSetPrice={setPrice}
                         onToggleDamaged={toggleDamaged}
                         currencySymbol={currencySymbol}
                     />

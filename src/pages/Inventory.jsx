@@ -21,6 +21,8 @@ export default function Inventory() {
     const [brands, setBrands] = useState([])
     const [models, setModels] = useState([])
     const [selectedCategoryId, setSelectedCategoryId] = useState('')
+    const [subcategories, setSubcategories] = useState([])
+    const [selectedSubcategoryId, setSelectedSubcategoryId] = useState('')
     const [selectedBrandId, setSelectedBrandId] = useState('')
     const [selectedModelId, setSelectedModelId] = useState('')
     const [currencySymbol, setCurrencySymbol] = useState('Bs.')
@@ -59,12 +61,14 @@ export default function Inventory() {
 
     async function fetchFilterOptions() {
         try {
-            const [cats, brs, mods] = await Promise.all([
+            const [cats, subcats, brs, mods] = await Promise.all([
                 inventoryService.getCategories(),
+                inventoryService.getSubcategories(),
                 inventoryService.getBrands(),
                 inventoryService.getModels()
             ])
             setCategories(cats || [])
+            setSubcategories(subcats || [])
             setBrands(brs || [])
             setModels(mods || [])
         } catch (err) {
@@ -171,6 +175,7 @@ export default function Inventory() {
                 .select(`
                     *,
                     category:categories(name),
+                    subcategory:subcategories(name),
                     brand:brands(name),
                     model:models(name),
                     product_branch_settings(*)
@@ -183,6 +188,7 @@ export default function Inventory() {
                     .select(`
                         *,
                         category:categories(name),
+                        subcategory:subcategories(name),
                         brand:brands(name),
                         model:models(name),
                         settings:product_branch_settings!inner(*)
@@ -373,9 +379,10 @@ export default function Inventory() {
             (p.name?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
             (p.sku?.toLowerCase() || '').includes(searchTerm.toLowerCase())
         )
-        .filter(p => !selectedCategoryId || p.category_id === selectedCategoryId)
-        .filter(p => !selectedBrandId || p.brand_id === selectedBrandId)
-        .filter(p => !selectedModelId || p.model_id === selectedModelId)
+        .filter(p => !selectedCategoryId || String(p.category_id) === String(selectedCategoryId))
+        .filter(p => !selectedSubcategoryId || String(p.subcategory_id) === String(selectedSubcategoryId))
+        .filter(p => !selectedBrandId || String(p.brand_id) === String(selectedBrandId))
+        .filter(p => !selectedModelId || String(p.model_id) === String(selectedModelId))
 
     return (
         <div style={{ position: 'relative', paddingBottom: '2rem' }}>
@@ -521,7 +528,7 @@ export default function Inventory() {
                 </div>
             </div>
 
-            <div className="card" style={{ marginBottom: '2rem', display: 'flex', gap: '1rem', padding: '1rem', alignItems: 'center' }}>
+            <div className="card" style={{ marginBottom: '2rem', display: 'flex', gap: '0.75rem', padding: '1rem', alignItems: 'center', flexWrap: 'wrap' }}>
                 <div style={{ position: 'relative', flex: 1 }}>
                     <Search size={20} style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', color: 'hsl(var(--secondary-foreground))' }} />
                     <input
@@ -560,11 +567,29 @@ export default function Inventory() {
                     <select
                         style={{ backgroundColor: 'transparent', border: 'none', cursor: 'pointer', fontSize: '0.85rem', fontWeight: '500' }}
                         value={selectedCategoryId}
-                        onChange={(e) => setSelectedCategoryId(e.target.value)}
+                        onChange={(e) => {
+                            setSelectedCategoryId(e.target.value)
+                            setSelectedSubcategoryId('')
+                        }}
                     >
                         <option value="">Categoría: Todas</option>
                         {categories.map(c => (
                             <option key={c.id} value={c.id}>{c.name}</option>
+                        ))}
+                    </select>
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', backgroundColor: 'hsl(var(--secondary))', padding: '0.4rem 0.6rem', borderRadius: '10px' }}>
+                    <Layers size={16} style={{ color: 'hsl(var(--secondary-foreground))', opacity: 0.6 }} />
+                    <select
+                        style={{ backgroundColor: 'transparent', border: 'none', cursor: 'pointer', fontSize: '0.85rem', fontWeight: '500' }}
+                        value={selectedSubcategoryId}
+                        onChange={(e) => setSelectedSubcategoryId(e.target.value)}
+                        disabled={!selectedCategoryId}
+                    >
+                        <option value="">Subcategoría: Todas</option>
+                        {(selectedCategoryId ? subcategories.filter(s => String(s.category_id) === String(selectedCategoryId)) : subcategories).map(s => (
+                            <option key={s.id} value={s.id}>{s.name}</option>
                         ))}
                     </select>
                 </div>
@@ -615,6 +640,7 @@ export default function Inventory() {
                     style={{ backgroundColor: 'hsl(var(--secondary))', padding: '0.4rem 0.8rem', borderRadius: '10px' }}
                     onClick={() => {
                         setSelectedCategoryId('')
+                        setSelectedSubcategoryId('')
                         setSelectedBrandId('')
                         setSelectedModelId('')
                         setSearchTerm('')
@@ -718,6 +744,11 @@ export default function Inventory() {
                                             <span style={{ padding: '2px 10px', backgroundColor: 'hsl(var(--secondary))', border: '1px solid hsl(var(--border))', borderRadius: '6px', fontSize: '0.7rem', fontWeight: '600', color: 'hsl(var(--secondary-foreground))' }}>
                                                 {product.category?.name || 'Gral'}
                                             </span>
+                                            {product.subcategory?.name && (
+                                                <span style={{ padding: '2px 10px', backgroundColor: 'hsl(var(--secondary) / 0.6)', border: '1px solid hsl(var(--border) / 0.8)', borderRadius: '6px', fontSize: '0.7rem', fontWeight: '600', color: 'hsl(var(--secondary-foreground))' }}>
+                                                    {product.subcategory.name}
+                                                </span>
+                                            )}
                                             {product.unit_of_measure && product.unit_of_measure !== 'Unidad' && (
                                                 <span style={{ padding: '2px 10px', backgroundColor: 'hsl(var(--primary) / 0.1)', color: 'hsl(var(--primary))', border: '1px solid hsl(var(--primary) / 0.2)', borderRadius: '6px', fontSize: '0.7rem', fontWeight: '700' }}>
                                                     {product.unit_of_measure}

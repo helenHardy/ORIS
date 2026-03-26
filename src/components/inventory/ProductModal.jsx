@@ -8,6 +8,7 @@ export default function ProductModal({ product, onClose, onSave, isSaving, curre
         name: '',
         sku: '',
         category_id: '',
+        subcategory_id: '',
         brand_id: '',
         model_id: '',
         description: '',
@@ -17,12 +18,15 @@ export default function ProductModal({ product, onClose, onSave, isSaving, curre
         active: true
     })
     const [categories, setCategories] = useState([])
+    const [subcategories, setSubcategories] = useState([])
     const [brands, setBrands] = useState([])
     const [models, setModels] = useState([])
     const [isAddingCategory, setIsAddingCategory] = useState(false)
+    const [isAddingSubcategory, setIsAddingSubcategory] = useState(false)
     const [isAddingBrand, setIsAddingBrand] = useState(false)
     const [isAddingModel, setIsAddingModel] = useState(false)
     const [newCategoryName, setNewCategoryName] = useState('')
+    const [newSubcategoryName, setNewSubcategoryName] = useState('')
     const [newBrandName, setNewBrandName] = useState('')
     const [newModelName, setNewModelName] = useState('')
     const [uploadingImage, setUploadingImage] = useState(false)
@@ -40,10 +44,11 @@ export default function ProductModal({ product, onClose, onSave, isSaving, curre
             const { data: { user } } = await supabase.auth.getUser()
             if (!user) return
 
-            const [branchesReq, brandsData, categoriesData, profileReq, assignmentsReq] = await Promise.all([
+            const [branchesReq, brandsData, categoriesData, subcategoriesData, profileReq, assignmentsReq] = await Promise.all([
                 supabase.from('branches').select('*').eq('active', true),
                 inventoryService.getBrands(),
                 inventoryService.getCategories(),
+                inventoryService.getSubcategories(),
                 supabase.from('profiles').select('role').eq('id', user.id).single(),
                 supabase.from('user_branches').select('branch_id').eq('user_id', user.id)
             ])
@@ -60,6 +65,7 @@ export default function ProductModal({ product, onClose, onSave, isSaving, curre
             setBranches(allBranches)
             setBrands(brandsData || [])
             setCategories(categoriesData || [])
+            setSubcategories(subcategoriesData || [])
         } catch (err) {
             console.error('Error fetching initial data:', err)
         } finally {
@@ -73,6 +79,7 @@ export default function ProductModal({ product, onClose, onSave, isSaving, curre
                 name: product.name || '',
                 sku: product.sku || '',
                 category_id: product.category_id || '',
+                subcategory_id: product.subcategory_id || '',
                 brand_id: product.brand_id || '',
                 model_id: product.model_id || '',
                 description: product.description || '',
@@ -192,6 +199,11 @@ export default function ProductModal({ product, onClose, onSave, isSaving, curre
         }))
     }
 
+    const handleCategoryChange = (e) => {
+        const categoryId = e.target.value
+        setFormData(prev => ({ ...prev, category_id: categoryId, subcategory_id: '' }))
+    }
+
     const handleBrandChange = (e) => {
         const brandId = e.target.value
         setFormData(prev => ({ ...prev, brand_id: brandId, model_id: '' }))
@@ -222,12 +234,26 @@ export default function ProductModal({ product, onClose, onSave, isSaving, curre
         try {
             const category = await inventoryService.createCategory(newCategoryName.trim())
             setCategories(prev => [...prev, category].sort((a, b) => a.name.localeCompare(b.name)))
-            setFormData(prev => ({ ...prev, category_id: category.id }))
+            setFormData(prev => ({ ...prev, category_id: category.id, subcategory_id: '' }))
             setNewCategoryName('')
             setIsAddingCategory(false)
         } catch (err) {
             console.error(err)
             setError('Error al crear categoría')
+        }
+    }
+
+    const handleAddSubcategory = async () => {
+        if (!newSubcategoryName.trim() || !formData.category_id) return
+        try {
+            const subcategory = await inventoryService.createSubcategory(newSubcategoryName.trim(), formData.category_id)
+            setSubcategories(prev => [...prev, subcategory].sort((a, b) => a.name.localeCompare(b.name)))
+            setFormData(prev => ({ ...prev, subcategory_id: subcategory.id }))
+            setNewSubcategoryName('')
+            setIsAddingSubcategory(false)
+        } catch (err) {
+            console.error(err)
+            setError('Error al crear subcategoría')
         }
     }
 
@@ -270,6 +296,7 @@ export default function ProductModal({ product, onClose, onSave, isSaving, curre
         const dataToSave = {
             ...formData,
             category_id: formData.category_id || null,
+            subcategory_id: formData.subcategory_id || null,
             brand_id: formData.brand_id || null,
             model_id: formData.model_id || null
         }
@@ -547,7 +574,7 @@ export default function ProductModal({ product, onClose, onSave, isSaving, curre
                             </div>
 
                             {/* Middle Section: Categorization */}
-                            <div style={{ gridColumn: 'span 12', padding: '1.5rem', backgroundColor: 'hsl(var(--secondary) / 0.1)', borderRadius: '16px', display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1.5rem' }}>
+                            <div style={{ gridColumn: 'span 12', padding: '1.5rem', backgroundColor: 'hsl(var(--secondary) / 0.1)', borderRadius: '16px', display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1.5rem' }}>
 
                                 <div style={inputWrapperStyle}>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -561,9 +588,28 @@ export default function ProductModal({ product, onClose, onSave, isSaving, curre
                                             <button type="button" onClick={() => setIsAddingCategory(false)} className="btn btn-secondary" style={{ padding: '0 0.5rem' }}><X size={16} /></button>
                                         </div>
                                     ) : (
-                                        <select name="category_id" value={formData.category_id} onChange={handleChange} disabled={readOnly} style={{ ...inputStyle, backgroundColor: readOnly ? 'hsl(var(--secondary) / 0.2)' : 'hsl(var(--background))' }}>
+                                        <select name="category_id" value={formData.category_id} onChange={handleCategoryChange} disabled={readOnly} style={{ ...inputStyle, backgroundColor: readOnly ? 'hsl(var(--secondary) / 0.2)' : 'hsl(var(--background))' }}>
                                             <option value="">Seleccionar...</option>
                                             {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                                        </select>
+                                    )}
+                                </div>
+
+                                <div style={inputWrapperStyle}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                        <label style={labelStyle}><Layers size={14} style={{ marginRight: 4 }} /> Subcategoría</label>
+                                        {!readOnly && <button type="button" onClick={() => setIsAddingSubcategory(true)} disabled={!formData.category_id} style={{ fontSize: '0.7rem', color: formData.category_id ? 'hsl(var(--primary))' : 'gray', border: 'none', background: 'none', cursor: formData.category_id ? 'pointer' : 'not-allowed', fontWeight: 'bold' }}>+ Nueva</button>}
+                                    </div>
+                                    {isAddingSubcategory ? (
+                                        <div style={{ display: 'flex', gap: '0.25rem' }}>
+                                            <input autoFocus value={newSubcategoryName} onChange={(e) => setNewSubcategoryName(e.target.value)} style={{ ...inputStyle, flex: 1 }} placeholder="Nombre..." />
+                                            <button type="button" onClick={handleAddSubcategory} className="btn btn-primary" style={{ padding: '0 0.5rem' }}><Save size={16} /></button>
+                                            <button type="button" onClick={() => setIsAddingSubcategory(false)} className="btn btn-secondary" style={{ padding: '0 0.5rem' }}><X size={16} /></button>
+                                        </div>
+                                    ) : (
+                                        <select name="subcategory_id" value={formData.subcategory_id} onChange={handleChange} disabled={!formData.category_id || readOnly} style={{ ...inputStyle, opacity: (!formData.category_id || readOnly) ? 0.6 : 1, backgroundColor: readOnly ? 'hsl(var(--secondary) / 0.2)' : 'hsl(var(--background))' }}>
+                                            <option value="">{formData.category_id ? 'Seleccionar...' : 'Elija Categoría'}</option>
+                                            {(formData.category_id ? subcategories.filter(s => String(s.category_id) === String(formData.category_id)) : []).map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                                         </select>
                                     )}
                                 </div>
