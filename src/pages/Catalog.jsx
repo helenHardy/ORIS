@@ -176,7 +176,7 @@ export default function Catalog() {
                             <div style={{ width: '40px', height: '40px', backgroundColor: '#1e293b', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white' }}>
                                 <ShoppingBag size={20} />
                             </div>
-                            <span style={{ fontWeight: 900, fontSize: '1.25rem', color: '#1e293b', letterSpacing: '-0.5px' }}>HEHA SHOP</span>
+                            <span style={{ fontWeight: 900, fontSize: '1.25rem', color: '#1e293b', letterSpacing: '-0.5px' }}>CASA ORIS</span>
                         </div>
                         <p style={{ fontSize: '0.75rem', color: '#94a3b8', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '1px' }}>Categorías</p>
                     </div>
