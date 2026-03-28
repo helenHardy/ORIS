@@ -69,7 +69,10 @@ export default function Catalog() {
         const matchesSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
             (p.sku && p.sku.toLowerCase().includes(searchTerm.toLowerCase()))
         const matchesCategory = selectedCategory === 'all' || p.category_id?.toString() === selectedCategory
-        return matchesSearch && matchesCategory
+        
+        // Only show products with stock > 0
+        const stock = p.settings?.[0]?.stock || 0
+        return matchesSearch && matchesCategory && stock > 0
     })
 
     const getCategoryIcon = (name) => {
@@ -354,7 +357,6 @@ export default function Catalog() {
                         }}>
                             {filteredProducts.map(product => {
                                 const settings = product.settings?.[0]
-                                const isOutOfStock = (settings?.stock || 0) <= 0
                                 const originalPrice = settings?.price || product.price
                                 const discount = settings?.discount_amount || 0
                                 const finalPrice = originalPrice - discount
@@ -372,7 +374,6 @@ export default function Catalog() {
                                             display: viewMode === 'list' ? 'flex' : 'flex',
                                             flexDirection: viewMode === 'list' ? 'row' : 'column',
                                             transition: 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
-                                            opacity: isOutOfStock ? 0.75 : 1,
                                             position: 'relative',
                                             border: '1px solid #f1f5f9'
                                         }}
@@ -393,7 +394,7 @@ export default function Catalog() {
                                                 <Package size={64} style={{ color: '#cbd5e1' }} />
                                             )}
 
-                                            {hasOffer && !isOutOfStock && (
+                                            {hasOffer && (
                                                 <div style={{ position: 'absolute', top: '1.25rem', left: '1.25rem', backgroundColor: '#ef4444', color: 'white', padding: '0.4rem 0.8rem', borderRadius: '12px', fontSize: '0.7rem', fontWeight: 900, boxShadow: '0 8px 16px rgba(239, 68, 68, 0.25)', zIndex: 10 }}>
                                                     SALE
                                                 </div>

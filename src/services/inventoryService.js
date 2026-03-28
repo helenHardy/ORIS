@@ -215,26 +215,42 @@ export const inventoryService = {
             price: parseFloat(p.price) || 0,
             cost_price: parseFloat(p.cost) || 0,
             unit_of_measure: p.unit || 'Unid.',
-            status: 'Activo'
+            active: true
         }))
 
-        // Insert products (handling duplicates by SKU isn't native in this simple flow, but we can do it if needed)
-        const { data: insertedProducts, error: pError } = await supabase.from('products').insert(productsToInsert).select()
+        // Use upsert to handle existing SKUs (update if exists)
+        const { data: insertedProducts, error: pError } = await supabase
+            .from('products')
+            .upsert(productsToInsert, { onConflict: 'sku' })
+            .select()
+
         if (pError) throw pError
 
         // 6. Branch Settings (Stock)
         if (branchId && insertedProducts) {
-            const settingsToInsert = insertedProducts.map((p, index) => {
-                const original = productList[index]
+            // Create a lookup for original product data by SKU
+            const productDataBySku = {}
+            productList.forEach(p => {
+                const sku = p.sku || 'UNKNOWN' // Fallback (should have been handled during building productsToInsert)
+                productDataBySku[sku] = p
+            })
+
+            const settingsToInsert = insertedProducts.map(p => {
+                const original = productDataBySku[p.sku]
                 return {
                     product_id: p.id,
                     branch_id: branchId,
-                    stock: parseFloat(original.stock) || 0,
-                    min_stock: parseFloat(original.minStock) || 0,
+                    stock: parseFloat(original?.stock) || 0,
+                    min_stock: parseFloat(original?.minStock) || 0,
                     price: p.price
                 }
             })
-            const { error: sError } = await supabase.from('product_branch_settings').insert(settingsToInsert)
+
+            // Use upsert for settings too, in case they already exist for this product/branch
+            const { error: sError } = await supabase
+                .from('product_branch_settings')
+                .upsert(settingsToInsert, { onConflict: 'product_id, branch_id' })
+
             if (sError) throw sError
         }
 
