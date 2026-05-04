@@ -53,6 +53,11 @@ export default function CheckoutModal({ total, onClose, onConfirm, isProcessing,
             return
         }
 
+        if (paymentMethod !== 'Crédito' && !selectedCashBoxId) {
+            alert('Debe seleccionar una caja de destino para procesar el pago')
+            return
+        }
+
         let finalPaymentMethod = paymentMethod
         let finalAmountReceived = amountPaid ? parseFloat(amountPaid) : finalTotal
         let finalChange = parseFloat(change)

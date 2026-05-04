@@ -63,11 +63,13 @@ export default function ProductGrid({ searchTerm, branchId, category, onAddToCar
             (p.sku?.toLowerCase() || '').includes(searchTerm.toLowerCase())
         const matchesCategory = category === 'Todos' || p.category?.name === category
 
+        // Filter out products without stock depending on mode
         if (onlyMermas) {
             return matchesSearch && matchesCategory && (p.damaged_stock > 0)
         }
 
-        return matchesSearch && matchesCategory
+        // Hide products with 0 normal stock in POS
+        return matchesSearch && matchesCategory && (p.stock > 0)
     })
 
     const totalPages = Math.ceil(filteredProducts.length / pageSize)

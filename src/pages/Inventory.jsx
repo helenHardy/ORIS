@@ -191,7 +191,7 @@ export default function Inventory() {
                         subcategory:subcategories(name),
                         brand:brands(name),
                         model:models(name),
-                        settings:product_branch_settings!inner(*)
+                        settings:product_branch_settings(*)
                     `)
                     .eq('settings.branch_id', selectedBranchId)
             }
