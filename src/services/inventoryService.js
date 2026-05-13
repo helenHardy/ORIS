@@ -77,33 +77,6 @@ export const inventoryService = {
         if (error) throw error
     },
 
-    // MODELS
-    async getModels(brandId) {
-        let query = supabase.from('models').select('*').order('name')
-        if (brandId) {
-            query = query.eq('brand_id', brandId)
-        }
-        const { data, error } = await query
-        if (error) throw error
-        return data
-    },
-
-    async createModel(name, brandId) {
-        const { data, error } = await supabase.from('models').insert([{ name, brand_id: brandId }]).select().single()
-        if (error) throw error
-        return data
-    },
-
-    async updateModel(id, name, brandId) {
-        const { data, error } = await supabase.from('models').update({ name, brand_id: brandId }).eq('id', id).select().single()
-        if (error) throw error
-        return data
-    },
-
-    async deleteModel(id) {
-        const { error } = await supabase.from('models').delete().eq('id', id)
-        if (error) throw error
-    },
 
     // IMAGES
     async uploadProductImage(file) {
@@ -178,32 +151,6 @@ export const inventoryService = {
             }
         }
 
-        // 4. Resolve/Create Models (simplified: just link to brand if provided)
-        const modelsToCreate = productList.filter(p => p.model && p.brand).map(p => ({
-            name: p.model,
-            brand_id: brandMap[p.brand.toLowerCase()]
-        }))
-        // We'll just do a quick unique check for models too
-        const uniqueModels = []
-        const seenModels = new Set()
-        modelsToCreate.forEach(m => {
-            const key = `${m.name.toLowerCase()}|${m.brand_id}`
-            if (!seenModels.has(key)) {
-                uniqueModels.push(m)
-                seenModels.add(key)
-            }
-        })
-
-        const { data: existingModels } = await supabase.from('models').select('*')
-        const modelMap = {}
-        existingModels?.forEach(m => modelMap[`${m.name.toLowerCase()}|${m.brand_id}`] = m.id)
-
-        for (const m of uniqueModels) {
-            if (!modelMap[`${m.name.toLowerCase()}|${m.brand_id}`]) {
-                const { data } = await supabase.from('models').insert([m]).select().single()
-                if (data) modelMap[`${m.name.toLowerCase()}|${m.brand_id}`] = data.id
-            }
-        }
 
         // 5. Build Products to Insert
         const productsToInsert = productList.map(p => ({
@@ -211,7 +158,6 @@ export const inventoryService = {
             name: p.name,
             category_id: p.category ? catMap[p.category.toLowerCase()] : null,
             brand_id: p.brand ? brandMap[p.brand.toLowerCase()] : null,
-            model_id: (p.model && p.brand) ? modelMap[`${p.model.toLowerCase()}|${brandMap[p.brand.toLowerCase()]}`] : null,
             price: parseFloat(p.price) || 0,
             cost_price: parseFloat(p.cost) || 0,
             unit_of_measure: p.unit || 'Unid.',

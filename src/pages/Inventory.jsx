@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { Plus, Search, Filter, Package, AlertTriangle, RefreshCw, Edit2, Trash2, Building2, History, Download, X, CheckCircle, Eye, Tag, Layers, Upload } from 'lucide-react'
+import { Plus, Search, Filter, Package, AlertTriangle, RefreshCw, Edit2, Trash2, Building2, History, Download, X, CheckCircle, Eye, Tag, Layers, Upload, FilterX, ArrowRight, Info } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { inventoryService } from '../services/inventoryService'
 import ProductModal from '../components/inventory/ProductModal'
@@ -19,12 +19,10 @@ export default function Inventory() {
     const [searchTerm, setSearchTerm] = useState('')
     const [categories, setCategories] = useState([])
     const [brands, setBrands] = useState([])
-    const [models, setModels] = useState([])
     const [selectedCategoryId, setSelectedCategoryId] = useState('')
     const [subcategories, setSubcategories] = useState([])
     const [selectedSubcategoryId, setSelectedSubcategoryId] = useState('')
     const [selectedBrandId, setSelectedBrandId] = useState('')
-    const [selectedModelId, setSelectedModelId] = useState('')
     const [currencySymbol, setCurrencySymbol] = useState('Bs.')
     const [showInactive, setShowInactive] = useState(false)
 
@@ -61,16 +59,14 @@ export default function Inventory() {
 
     async function fetchFilterOptions() {
         try {
-            const [cats, subcats, brs, mods] = await Promise.all([
+            const [cats, subcats, brs] = await Promise.all([
                 inventoryService.getCategories(),
                 inventoryService.getSubcategories(),
-                inventoryService.getBrands(),
-                inventoryService.getModels()
+                inventoryService.getBrands()
             ])
             setCategories(cats || [])
             setSubcategories(subcats || [])
             setBrands(brs || [])
-            setModels(mods || [])
         } catch (err) {
             console.error('Error fetching filter options:', err)
         }
@@ -177,7 +173,6 @@ export default function Inventory() {
                     category:categories(name),
                     subcategory:subcategories(name),
                     brand:brands(name),
-                    model:models(name),
                     product_branch_settings(*)
                 `)
 
@@ -190,7 +185,6 @@ export default function Inventory() {
                         category:categories(name),
                         subcategory:subcategories(name),
                         brand:brands(name),
-                        model:models(name),
                         settings:product_branch_settings(*)
                     `)
                     .eq('settings.branch_id', selectedBranchId)
@@ -382,7 +376,6 @@ export default function Inventory() {
         .filter(p => !selectedCategoryId || String(p.category_id) === String(selectedCategoryId))
         .filter(p => !selectedSubcategoryId || String(p.subcategory_id) === String(selectedSubcategoryId))
         .filter(p => !selectedBrandId || String(p.brand_id) === String(selectedBrandId))
-        .filter(p => !selectedModelId || String(p.model_id) === String(selectedModelId))
 
     return (
         <div style={{ position: 'relative', paddingBottom: '2rem' }}>
@@ -489,169 +482,256 @@ export default function Inventory() {
                 />
             )}
 
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '2.5rem', gap: '2rem', flexWrap: 'wrap' }}>
                 <div>
-                    <h1 style={{ fontSize: '1.875rem', fontWeight: 'bold' }}>Inventario</h1>
-                    <p style={{ color: 'hsl(var(--secondary-foreground))' }}>Gestión de productos y existencias</p>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.5rem' }}>
+                        <div style={{ backgroundColor: 'hsl(var(--primary) / 0.1)', color: 'hsl(var(--primary))', padding: '0.5rem', borderRadius: '12px' }}>
+                            <Package size={28} />
+                        </div>
+                        <h1 style={{ fontSize: '2.25rem', fontWeight: '800', letterSpacing: '-0.025em', margin: 0 }}>Inventario</h1>
+                    </div>
+                    <p style={{ color: 'hsl(var(--secondary-foreground))', opacity: 0.7, fontSize: '1rem', marginLeft: '3.5rem' }}>
+                        Control centralizado de productos, existencias y movimientos.
+                    </p>
                 </div>
-                <div style={{ display: 'flex', gap: '1rem' }}>
-                    <button
-                        className="btn"
-                        onClick={handleExport}
-                        style={{ backgroundColor: 'hsl(var(--secondary))', gap: '0.5rem' }}
-                        title="Exportar a CSV"
-                    >
-                        <Download size={20} />
-                        Exportar
-                    </button>
-                    <button
-                        className="btn"
-                        onClick={() => setIsImportModalOpen(true)}
-                        style={{ backgroundColor: 'hsl(var(--secondary))', gap: '0.5rem' }}
-                        title="Importar desde Excel/CSV"
-                    >
-                        <Upload size={20} />
-                        Importar
-                    </button>
+                <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+                    <div style={{ display: 'flex', backgroundColor: 'hsl(var(--secondary) / 0.5)', padding: '0.35rem', borderRadius: '14px', border: '1px solid hsl(var(--border) / 0.5)' }}>
+                        <button
+                            className="btn"
+                            onClick={handleExport}
+                            style={{ backgroundColor: 'transparent', gap: '0.5rem', fontSize: '0.875rem', padding: '0.5rem 1rem' }}
+                            title="Exportar a CSV"
+                        >
+                            <Download size={18} />
+                            Exportar
+                        </button>
+                        <div style={{ width: '1px', backgroundColor: 'hsl(var(--border) / 0.5)', margin: '0.5rem 0' }} />
+                        <button
+                            className="btn"
+                            onClick={() => setIsImportModalOpen(true)}
+                            style={{ backgroundColor: 'transparent', gap: '0.5rem', fontSize: '0.875rem', padding: '0.5rem 1rem' }}
+                            title="Importar desde Excel/CSV"
+                        >
+                            <Upload size={18} />
+                            Importar
+                        </button>
+                    </div>
+                    
                     <button
                         className="btn"
                         onClick={fetchProducts}
                         disabled={loading}
-                        style={{ backgroundColor: 'hsl(var(--secondary))' }}
+                        style={{ backgroundColor: 'hsl(var(--secondary) / 0.8)', padding: '0.5rem', borderRadius: '12px' }}
                     >
                         <RefreshCw size={20} className={loading ? 'animate-spin' : ''} />
                     </button>
-                    <button className="btn btn-primary" onClick={() => setIsModalOpen(true)}>
-                        <Plus size={20} style={{ marginRight: '0.5rem' }} />
+                    
+                    <button 
+                        className="btn btn-primary" 
+                        onClick={() => setIsModalOpen(true)}
+                        style={{ 
+                            gap: '0.5rem', 
+                            padding: '0.75rem 1.5rem', 
+                            borderRadius: '12px',
+                            boxShadow: '0 4px 12px hsl(var(--primary) / 0.25)',
+                            fontWeight: '600'
+                        }}
+                    >
+                        <Plus size={20} />
                         Nuevo Producto
                     </button>
                 </div>
             </div>
 
-            <div className="card" style={{ marginBottom: '2rem', display: 'flex', gap: '0.75rem', padding: '1rem', alignItems: 'center', flexWrap: 'wrap' }}>
-                <div style={{ position: 'relative', flex: 1 }}>
-                    <Search size={20} style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', color: 'hsl(var(--secondary-foreground))' }} />
-                    <input
-                        type="text"
-                        placeholder="Buscar por nombre o SKU..."
+            {/* Filter Section */}
+            <div style={{ 
+                display: 'flex', 
+                flexDirection: 'column', 
+                gap: '1.25rem', 
+                marginBottom: '2rem',
+                backgroundColor: 'hsl(var(--card))',
+                padding: '1.5rem',
+                borderRadius: '20px',
+                border: '1px solid hsl(var(--border) / 0.6)',
+                boxShadow: '0 4px 20px rgba(0,0,0,0.03)'
+            }}>
+                {/* Search Bar Row */}
+                <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+                    <div style={{ position: 'relative', flex: 1 }}>
+                        <Search size={20} style={{ position: 'absolute', left: '1.25rem', top: '50%', transform: 'translateY(-50%)', color: 'hsl(var(--secondary-foreground))', opacity: 0.5 }} />
+                        <input
+                            type="text"
+                            placeholder="Buscar productos por nombre, SKU o código de barras..."
+                            style={{
+                                width: '100%',
+                                padding: '0.875rem 1rem 0.875rem 3.25rem',
+                                backgroundColor: 'hsl(var(--secondary) / 0.4)',
+                                border: '1px solid hsl(var(--border) / 0.5)',
+                                borderRadius: '14px',
+                                fontSize: '1rem',
+                                outline: 'none',
+                                transition: 'all 0.2s',
+                                color: 'hsl(var(--foreground))'
+                            }}
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                            onFocus={(e) => e.target.style.borderColor = 'hsl(var(--primary) / 0.5)'}
+                            onBlur={(e) => e.target.style.borderColor = 'hsl(var(--border) / 0.5)'}
+                        />
+                    </div>
+                    
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', backgroundColor: 'hsl(var(--secondary) / 0.6)', padding: '0.5rem 1rem', borderRadius: '14px', border: '1px solid hsl(var(--border) / 0.4)' }}>
+                        <Building2 size={18} style={{ color: 'hsl(var(--primary))', opacity: 0.7 }} />
+                        <div style={{ display: 'flex', flexDirection: 'column' }}>
+                            <span style={{ fontSize: '0.7rem', fontWeight: '700', opacity: 0.5, textTransform: 'uppercase' }}>Sucursal</span>
+                            <select
+                                disabled={branches.length <= 1 && !isAdmin}
+                                style={{ 
+                                    backgroundColor: 'transparent', 
+                                    border: 'none', 
+                                    cursor: 'pointer', 
+                                    fontSize: '0.9rem', 
+                                    fontWeight: '600',
+                                    padding: 0,
+                                    outline: 'none'
+                                }}
+                                value={selectedBranchId}
+                                onChange={(e) => setSelectedBranchId(e.target.value)}
+                            >
+                                {isAdmin && <option value="all">Todas las Sucursales</option>}
+                                {branches.map(b => (
+                                    <option key={b.id} value={b.id}>{b.name}</option>
+                                ))}
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Filters Row */}
+                <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <Filter size={16} style={{ opacity: 0.5 }} />
+                        <span style={{ fontSize: '0.875rem', fontWeight: '600', color: 'hsl(var(--secondary-foreground))', opacity: 0.7 }}>Filtrar por:</span>
+                    </div>
+
+                    {/* Classification Group */}
+                    <div style={{ display: 'flex', gap: '0.5rem', backgroundColor: 'hsl(var(--secondary) / 0.3)', padding: '0.35rem', borderRadius: '12px' }}>
+                        <select
+                            style={{ 
+                                backgroundColor: selectedCategoryId ? 'hsl(var(--primary) / 0.1)' : 'transparent', 
+                                border: 'none', 
+                                cursor: 'pointer', 
+                                fontSize: '0.85rem', 
+                                fontWeight: '500',
+                                padding: '0.4rem 0.75rem',
+                                borderRadius: '8px',
+                                color: selectedCategoryId ? 'hsl(var(--primary))' : 'inherit'
+                            }}
+                            value={selectedCategoryId}
+                            onChange={(e) => {
+                                setSelectedCategoryId(e.target.value)
+                                setSelectedSubcategoryId('')
+                            }}
+                        >
+                            <option value="">Categoría: Todas</option>
+                            {categories.map(c => (
+                                <option key={c.id} value={c.id}>{c.name}</option>
+                            ))}
+                        </select>
+
+                        <select
+                            style={{ 
+                                backgroundColor: selectedSubcategoryId ? 'hsl(var(--primary) / 0.1)' : 'transparent', 
+                                border: 'none', 
+                                cursor: 'pointer', 
+                                fontSize: '0.85rem', 
+                                fontWeight: '500',
+                                padding: '0.4rem 0.75rem',
+                                borderRadius: '8px',
+                                color: selectedSubcategoryId ? 'hsl(var(--primary))' : 'inherit'
+                            }}
+                            value={selectedSubcategoryId}
+                            onChange={(e) => setSelectedSubcategoryId(e.target.value)}
+                            disabled={!selectedCategoryId}
+                        >
+                            <option value="">Subcategoría: Todas</option>
+                            {(selectedCategoryId ? subcategories.filter(s => String(s.category_id) === String(selectedCategoryId)) : subcategories).map(s => (
+                                <option key={s.id} value={s.id}>{s.name}</option>
+                            ))}
+                        </select>
+                    </div>
+
+                    {/* Brand Group */}
+                    <div style={{ display: 'flex', gap: '0.5rem', backgroundColor: 'hsl(var(--secondary) / 0.3)', padding: '0.35rem', borderRadius: '12px' }}>
+                        <select
+                            style={{ 
+                                backgroundColor: selectedBrandId ? 'hsl(var(--accent) / 0.1)' : 'transparent', 
+                                border: 'none', 
+                                cursor: 'pointer', 
+                                fontSize: '0.85rem', 
+                                fontWeight: '500',
+                                padding: '0.4rem 0.75rem',
+                                borderRadius: '8px',
+                                color: selectedBrandId ? 'hsl(var(--accent))' : 'inherit'
+                            }}
+                            value={selectedBrandId}
+                            onChange={(e) => setSelectedBrandId(e.target.value)}
+                        >
+                            <option value="">Marca: Todas</option>
+                            {brands.map(b => (
+                                <option key={b.id} value={b.id}>{b.name}</option>
+                            ))}
+                        </select>
+                    </div>
+
+                    <div style={{ flex: 1 }} />
+
+                    <button
                         className="btn"
-                        style={{
-                            width: '100%',
-                            paddingLeft: '2.5rem',
-                            backgroundColor: 'hsl(var(--secondary))',
-                            cursor: 'text',
-                            justifyContent: 'flex-start'
+                        style={{ 
+                            backgroundColor: showInactive ? 'hsl(var(--destructive) / 0.1)' : 'hsl(var(--secondary) / 0.5)', 
+                            padding: '0.5rem 1rem', 
+                            borderRadius: '10px', 
+                            color: showInactive ? 'hsl(var(--destructive))' : 'inherit',
+                            fontSize: '0.85rem',
+                            fontWeight: '600',
+                            gap: '0.5rem',
+                            border: '1px solid hsl(var(--border) / 0.4)'
                         }}
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                    />
-                </div>
-
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', backgroundColor: 'hsl(var(--secondary))', padding: '0.4rem 0.6rem', borderRadius: '10px' }}>
-                    <Building2 size={16} style={{ color: 'hsl(var(--secondary-foreground))', opacity: 0.6 }} />
-                    <select
-                        disabled={branches.length <= 1 && !isAdmin}
-                        style={{ backgroundColor: 'transparent', border: 'none', cursor: 'pointer', fontSize: '0.85rem', fontWeight: '500' }}
-                        value={selectedBranchId}
-                        onChange={(e) => setSelectedBranchId(e.target.value)}
+                        onClick={() => setShowInactive(!showInactive)}
                     >
-                        {isAdmin && <option value="all">Stock Global</option>}
-                        {branches.map(b => (
-                            <option key={b.id} value={b.id}>{b.name}</option>
-                        ))}
-                    </select>
+                        {showInactive ? <Eye size={16} /> : <X size={16} style={{ opacity: 0.5 }} />}
+                        {showInactive ? "Mostrando Inactivos" : "Ocultar Inactivos"}
+                    </button>
+
+                    {(searchTerm || selectedCategoryId || selectedBrandId || showInactive) && (
+                        <button
+                            className="btn"
+                            style={{ 
+                                backgroundColor: 'hsl(var(--foreground) / 0.05)', 
+                                padding: '0.5rem 1rem', 
+                                borderRadius: '10px',
+                                fontSize: '0.85rem',
+                                fontWeight: '600',
+                                gap: '0.5rem',
+                                color: 'hsl(var(--secondary-foreground))'
+                            }}
+                            onClick={() => {
+                                setSelectedCategoryId('')
+                                setSelectedSubcategoryId('')
+                                setSelectedBrandId('')
+                                setSearchTerm('')
+                                setShowInactive(false)
+                                if (isAdmin) setSelectedBranchId('all')
+                            }}
+                        >
+                            <FilterX size={16} />
+                            Limpiar Filtros
+                        </button>
+                    )}
                 </div>
-
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', backgroundColor: 'hsl(var(--secondary))', padding: '0.4rem 0.6rem', borderRadius: '10px' }}>
-                    <Layers size={16} style={{ color: 'hsl(var(--secondary-foreground))', opacity: 0.6 }} />
-                    <select
-                        style={{ backgroundColor: 'transparent', border: 'none', cursor: 'pointer', fontSize: '0.85rem', fontWeight: '500' }}
-                        value={selectedCategoryId}
-                        onChange={(e) => {
-                            setSelectedCategoryId(e.target.value)
-                            setSelectedSubcategoryId('')
-                        }}
-                    >
-                        <option value="">Categoría: Todas</option>
-                        {categories.map(c => (
-                            <option key={c.id} value={c.id}>{c.name}</option>
-                        ))}
-                    </select>
-                </div>
-
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', backgroundColor: 'hsl(var(--secondary))', padding: '0.4rem 0.6rem', borderRadius: '10px' }}>
-                    <Layers size={16} style={{ color: 'hsl(var(--secondary-foreground))', opacity: 0.6 }} />
-                    <select
-                        style={{ backgroundColor: 'transparent', border: 'none', cursor: 'pointer', fontSize: '0.85rem', fontWeight: '500' }}
-                        value={selectedSubcategoryId}
-                        onChange={(e) => setSelectedSubcategoryId(e.target.value)}
-                        disabled={!selectedCategoryId}
-                    >
-                        <option value="">Subcategoría: Todas</option>
-                        {(selectedCategoryId ? subcategories.filter(s => String(s.category_id) === String(selectedCategoryId)) : subcategories).map(s => (
-                            <option key={s.id} value={s.id}>{s.name}</option>
-                        ))}
-                    </select>
-                </div>
-
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', backgroundColor: 'hsl(var(--secondary))', padding: '0.4rem 0.6rem', borderRadius: '10px' }}>
-                    <Tag size={16} style={{ color: 'hsl(var(--secondary-foreground))', opacity: 0.6 }} />
-                    <select
-                        style={{ backgroundColor: 'transparent', border: 'none', cursor: 'pointer', fontSize: '0.85rem', fontWeight: '500' }}
-                        value={selectedBrandId}
-                        onChange={(e) => {
-                            setSelectedBrandId(e.target.value)
-                            setSelectedModelId('')
-                        }}
-                    >
-                        <option value="">Marca: Todas</option>
-                        {brands.map(b => (
-                            <option key={b.id} value={b.id}>{b.name}</option>
-                        ))}
-                    </select>
-                </div>
-
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', backgroundColor: 'hsl(var(--secondary))', padding: '0.4rem 0.6rem', borderRadius: '10px' }}>
-                    <Layers size={16} style={{ color: 'hsl(var(--secondary-foreground))', opacity: 0.6 }} />
-                    <select
-                        style={{ backgroundColor: 'transparent', border: 'none', cursor: 'pointer', fontSize: '0.85rem', fontWeight: '500' }}
-                        value={selectedModelId}
-                        onChange={(e) => setSelectedModelId(e.target.value)}
-                        disabled={!selectedBrandId}
-                    >
-                        <option value="">Modelo: Todos</option>
-                        {(selectedBrandId ? models.filter(m => m.brand_id === selectedBrandId) : models).map(m => (
-                            <option key={m.id} value={m.id}>{m.name}</option>
-                        ))}
-                    </select>
-                </div>
-
-                <button
-                    className="btn"
-                    style={{ backgroundColor: showInactive ? 'hsl(var(--primary) / 0.1)' : 'hsl(var(--secondary))', padding: '0.4rem 0.8rem', borderRadius: '10px', color: showInactive ? 'hsl(var(--primary))' : 'inherit' }}
-                    onClick={() => setShowInactive(!showInactive)}
-                    title={showInactive ? "Ocultar Inactivos" : "Mostrar Inactivos"}
-                >
-                    <Eye size={16} />
-                </button>
-
-                <button
-                    className="btn"
-                    style={{ backgroundColor: 'hsl(var(--secondary))', padding: '0.4rem 0.8rem', borderRadius: '10px' }}
-                    onClick={() => {
-                        setSelectedCategoryId('')
-                        setSelectedSubcategoryId('')
-                        setSelectedBrandId('')
-                        setSelectedModelId('')
-                        setSearchTerm('')
-                        setShowInactive(false)
-                        if (isAdmin) setSelectedBranchId('all')
-                    }}
-                    title="Limpiar Filtros"
-                >
-                    <RefreshCw size={16} />
-                </button>
             </div>
+
 
             {
                 error && (
@@ -713,92 +793,155 @@ export default function Inventory() {
                                     onMouseEnter={(e) => { if (product.active !== false) e.currentTarget.style.backgroundColor = 'hsl(var(--secondary) / 0.2)' }}
                                     onMouseLeave={(e) => { if (product.active !== false) e.currentTarget.style.backgroundColor = 'transparent' }}
                                 >
-                                    <td style={{ padding: '1rem' }}>
+                                    <td style={{ padding: '1.25rem 1rem' }}>
                                         <div style={{
-                                            width: '56px',
-                                            height: '56px',
-                                            backgroundColor: 'hsl(var(--secondary) / 0.4)',
-                                            borderRadius: '12px',
+                                            width: '64px',
+                                            height: '64px',
+                                            backgroundColor: 'hsl(var(--secondary) / 0.3)',
+                                            borderRadius: '16px',
                                             overflow: 'hidden',
                                             display: 'flex',
                                             alignItems: 'center',
                                             justifyContent: 'center',
-                                            border: '1px solid hsl(var(--border) / 0.5)',
-                                            boxShadow: '0 2px 4px rgba(0,0,0,0.05)'
-                                        }}>
+                                            border: '1px solid hsl(var(--border) / 0.4)',
+                                            boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)',
+                                            position: 'relative',
+                                            transition: 'transform 0.2s'
+                                        }} className="product-image-container">
                                             {product.image_url ? (
                                                 <img src={product.image_url} alt={product.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                                             ) : (
-                                                <Package size={24} style={{ opacity: 0.2 }} />
+                                                <Package size={24} style={{ opacity: 0.15 }} />
                                             )}
                                         </div>
                                     </td>
-                                    <td style={{ padding: '1rem' }}>
-                                        <div style={{ display: 'flex', flexDirection: 'column' }}>
-                                            <p style={{ fontWeight: '700', fontSize: '0.95rem', margin: 0, color: 'hsl(var(--foreground))' }}>{product.name || 'Sin nombre'}</p>
-                                            <p style={{ fontSize: '0.75rem', color: 'hsl(var(--secondary-foreground))', opacity: 0.6, margin: 0 }}>SKU: {product.sku || '---'}</p>
+                                    <td style={{ padding: '1.25rem 1rem' }}>
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                                            <p style={{ fontWeight: '700', fontSize: '1rem', margin: 0, color: 'hsl(var(--foreground))', letterSpacing: '-0.01em' }}>{product.name || 'Sin nombre'}</p>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                                <span style={{ fontSize: '0.75rem', backgroundColor: 'hsl(var(--secondary) / 0.8)', padding: '2px 6px', borderRadius: '6px', color: 'hsl(var(--secondary-foreground))', opacity: 0.7, fontWeight: '600' }}>
+                                                    {product.sku || 'N/A'}
+                                                </span>
+                                                {product.barcode && (
+                                                    <span style={{ fontSize: '0.7rem', color: 'hsl(var(--secondary-foreground))', opacity: 0.5 }}>• {product.barcode}</span>
+                                                )}
+                                            </div>
                                         </div>
                                     </td>
-                                    <td style={{ padding: '1rem' }}>
+                                    <td style={{ padding: '1.25rem 1rem' }}>
                                         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
-                                            <span style={{ padding: '2px 10px', backgroundColor: 'hsl(var(--secondary))', border: '1px solid hsl(var(--border))', borderRadius: '6px', fontSize: '0.7rem', fontWeight: '600', color: 'hsl(var(--secondary-foreground))' }}>
+                                            <span style={{ 
+                                                padding: '4px 10px', 
+                                                backgroundColor: 'hsl(var(--primary) / 0.08)', 
+                                                color: 'hsl(var(--primary))',
+                                                borderRadius: '8px', 
+                                                fontSize: '0.75rem', 
+                                                fontWeight: '700' 
+                                            }}>
                                                 {product.category?.name || 'Gral'}
                                             </span>
-                                            {product.subcategory?.name && (
-                                                <span style={{ padding: '2px 10px', backgroundColor: 'hsl(var(--secondary) / 0.6)', border: '1px solid hsl(var(--border) / 0.8)', borderRadius: '6px', fontSize: '0.7rem', fontWeight: '600', color: 'hsl(var(--secondary-foreground))' }}>
-                                                    {product.subcategory.name}
-                                                </span>
-                                            )}
-                                            {product.unit_of_measure && product.unit_of_measure !== 'Unidad' && (
-                                                <span style={{ padding: '2px 10px', backgroundColor: 'hsl(var(--primary) / 0.1)', color: 'hsl(var(--primary))', border: '1px solid hsl(var(--primary) / 0.2)', borderRadius: '6px', fontSize: '0.7rem', fontWeight: '700' }}>
-                                                    {product.unit_of_measure}
-                                                </span>
-                                            )}
                                             {product.brand?.name && (
-                                                <span style={{ padding: '2px 10px', backgroundColor: 'hsl(var(--primary) / 0.08)', color: 'hsl(var(--primary))', border: '1px solid hsl(var(--primary) / 0.15)', borderRadius: '6px', fontSize: '0.7rem', fontWeight: '700' }}>
+                                                <span style={{ 
+                                                    padding: '4px 10px', 
+                                                    backgroundColor: 'hsl(var(--accent) / 0.08)', 
+                                                    color: 'hsl(var(--accent))',
+                                                    borderRadius: '8px', 
+                                                    fontSize: '0.75rem', 
+                                                    fontWeight: '700' 
+                                                }}>
                                                     {product.brand.name}
                                                 </span>
                                             )}
-                                            {product.model?.name && (
-                                                <span style={{ padding: '2px 10px', backgroundColor: 'hsl(var(--background))', color: 'hsl(var(--foreground))', border: '1px solid hsl(var(--border))', borderRadius: '6px', fontSize: '0.7rem', fontWeight: '500' }}>
-                                                    {product.model.name}
+                                            {product.unit_of_measure && product.unit_of_measure !== 'Unidad' && (
+                                                <span style={{ padding: '4px 8px', backgroundColor: 'hsl(var(--secondary))', color: 'hsl(var(--secondary-foreground))', borderRadius: '8px', fontSize: '0.7rem', fontWeight: '600', opacity: 0.8 }}>
+                                                    {product.unit_of_measure}
                                                 </span>
                                             )}
                                         </div>
                                     </td>
-                                    <td style={{ padding: '1rem' }}>
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                            <span style={{ fontWeight: '600' }}>{product.current_stock ?? 0}</span>
-                                            <span style={{ fontSize: '0.7rem', opacity: 0.5, fontWeight: '700' }}>{product.unit_of_measure || 'Unid.'}</span>
-                                            {(product.current_stock ?? 0) <= (product.current_min_stock ?? 0) && (
-                                                <AlertTriangle size={16} color="hsl(var(--destructive))" />
+                                    <td style={{ padding: '1.25rem 1rem' }}>
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.1rem' }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                                                <span style={{ 
+                                                    fontSize: '1.125rem', 
+                                                    fontWeight: '800',
+                                                    color: (product.current_stock ?? 0) <= (product.current_min_stock ?? 0) ? 'hsl(var(--destructive))' : 'inherit'
+                                                }}>
+                                                    {product.current_stock ?? 0}
+                                                </span>
+                                                {(product.current_stock ?? 0) <= (product.current_min_stock ?? 0) && (
+                                                    <AlertTriangle size={16} color="hsl(var(--destructive))" />
+                                                )}
+                                            </div>
+                                            <span style={{ fontSize: '0.7rem', opacity: 0.5, fontWeight: '700', textTransform: 'uppercase' }}>{product.unit_of_measure || 'Unid.'}</span>
+                                        </div>
+                                    </td>
+                                    <td style={{ padding: '1.25rem 1rem' }}>
+                                        {product.current_damaged_stock > 0 ? (
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                                <div style={{ 
+                                                    backgroundColor: 'hsl(var(--destructive) / 0.1)', 
+                                                    color: 'hsl(var(--destructive))',
+                                                    padding: '4px 8px',
+                                                    borderRadius: '8px',
+                                                    fontSize: '0.9rem',
+                                                    fontWeight: '700',
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    gap: '0.4rem'
+                                                }}>
+                                                    <AlertTriangle size={14} />
+                                                    {product.current_damaged_stock}
+                                                </div>
+                                                {selectedBranchId !== 'all' && (
+                                                    <button
+                                                        onClick={() => { setMermaProduct(product); setMermaMode('restore'); }}
+                                                        style={{ 
+                                                            backgroundColor: 'hsl(var(--secondary))',
+                                                            border: 'none',
+                                                            borderRadius: '6px',
+                                                            padding: '4px',
+                                                            cursor: 'pointer',
+                                                            display: 'flex'
+                                                        }}
+                                                        title="Restaurar a stock normal"
+                                                    >
+                                                        <RefreshCw size={12} />
+                                                    </button>
+                                                )}
+                                            </div>
+                                        ) : (
+                                            <span style={{ fontSize: '0.875rem', opacity: 0.3 }}>0</span>
+                                        )}
+                                    </td>
+                                    <td style={{ padding: '1.25rem 1rem' }}>
+                                        <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                            <span style={{ fontSize: '1.125rem', fontWeight: '800', color: 'hsl(var(--primary))', fontFamily: 'monospace' }}>
+                                                {currencySymbol}{(product.current_price ?? 0).toFixed(2)}
+                                            </span>
+                                            {product.discount_amount > 0 && (
+                                                <span style={{ fontSize: '0.7rem', color: 'hsl(142 76% 36%)', fontWeight: '700' }}>
+                                                    Desc. {currencySymbol}{product.discount_amount}
+                                                </span>
                                             )}
                                         </div>
                                     </td>
-                                    <td style={{ padding: '1rem' }}>
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                            <span style={{ fontWeight: '600', color: product.current_damaged_stock > 0 ? 'hsl(var(--destructive))' : 'inherit' }}>{product.current_damaged_stock ?? 0}</span>
-                                            {product.current_damaged_stock > 0 && selectedBranchId !== 'all' && (
-                                                <button
-                                                    onClick={() => { setMermaProduct(product); setMermaMode('restore'); }}
-                                                    style={{ background: 'none', border: 'none', color: 'hsl(var(--primary))', padding: 0, cursor: 'pointer' }}
-                                                    title="Restaurar a stock normal"
-                                                >
-                                                    <RefreshCw size={12} />
-                                                </button>
-                                            )}
-                                        </div>
-                                    </td>
-                                    <td style={{ padding: '1rem', fontFamily: 'monospace' }}>{currencySymbol}{(product.current_price ?? 0).toFixed(2)}</td>
-                                    <td style={{ padding: '1rem' }}>
+                                    <td style={{ padding: '1.25rem 1rem' }}>
                                         <span style={{
-                                            padding: '0.25rem 0.5rem',
-                                            borderRadius: '999px',
+                                            padding: '6px 12px',
+                                            borderRadius: '10px',
                                             fontSize: '0.75rem',
+                                            fontWeight: '700',
+                                            textTransform: 'uppercase',
+                                            letterSpacing: '0.025em',
                                             backgroundColor: product.active === false ? 'hsl(var(--secondary))' : ((product.current_stock ?? 0) > (product.current_min_stock ?? 0) ? 'hsl(142 76% 36% / 0.1)' : 'hsl(0 84% 60% / 0.1)'),
-                                            color: product.active === false ? 'hsl(var(--secondary-foreground))' : ((product.current_stock ?? 0) > (product.current_min_stock ?? 0) ? 'hsl(142 76% 36%)' : 'hsl(0 84% 60%)')
+                                            color: product.active === false ? 'hsl(var(--secondary-foreground) / 0.6)' : ((product.current_stock ?? 0) > (product.current_min_stock ?? 0) ? 'hsl(142 76% 36%)' : 'hsl(0 84% 60%)'),
+                                            display: 'inline-flex',
+                                            alignItems: 'center',
+                                            gap: '0.4rem'
                                         }}>
-                                            {product.active === false ? 'Inactivo' : ((product.current_stock ?? 0) > (product.current_min_stock ?? 0) ? 'En Stock' : 'Bajo Stock')}
+                                            {product.active === false && <Info size={12} />}
+                                            {product.active === false ? 'Inactivo' : ((product.current_stock ?? 0) > (product.current_min_stock ?? 0) ? 'En Stock' : 'Stock Bajo')}
                                         </span>
                                     </td>
                                     <td style={{ padding: '1rem', textAlign: 'right' }}>

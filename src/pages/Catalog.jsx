@@ -93,8 +93,8 @@ export default function Catalog() {
         return (
             <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#f8fafc' }}>
                 <div style={{ textAlign: 'center' }}>
-                    <Loader2 size={48} className="animate-spin" style={{ color: 'hsl(var(--primary))', marginBottom: '1rem' }} />
-                    <p style={{ fontWeight: 800, color: '#1e293b' }}>Cargando catálogo premium...</p>
+                    <Loader2 size={48} className="animate-spin" style={{ color: '#329D9C', marginBottom: '1rem' }} />
+                    <p style={{ fontWeight: 800, color: '#205072' }}>Cargando catálogo premium...</p>
                 </div>
             </div>
         )
@@ -105,10 +105,10 @@ export default function Catalog() {
             <div style={{ minHeight: '100vh', backgroundColor: '#f8fafc', padding: '4rem 1rem' }}>
                 <div style={{ maxWidth: '1000px', margin: '0 auto' }}>
                     <div style={{ textAlign: 'center', marginBottom: '4rem' }}>
-                        <span style={{ backgroundColor: 'hsl(var(--primary) / 0.1)', color: 'hsl(var(--primary))', padding: '0.5rem 1rem', borderRadius: '100px', fontSize: '0.8rem', fontWeight: 800, letterSpacing: '2px', textTransform: 'uppercase' }}>
+                        <span style={{ backgroundColor: '#CFF4D2', color: '#205072', padding: '0.5rem 1rem', borderRadius: '100px', fontSize: '0.8rem', fontWeight: 800, letterSpacing: '2px', textTransform: 'uppercase' }}>
                             Experiencia de Compra Premium
                         </span>
-                        <h1 style={{ fontSize: '3.5rem', fontWeight: 950, marginTop: '1.5rem', marginBottom: '1rem', color: '#1e293b', lineHeight: 1 }}>
+                        <h1 style={{ fontSize: '3.5rem', fontWeight: 950, marginTop: '1.5rem', marginBottom: '1rem', color: '#205072', lineHeight: 1 }}>
                             Nuestras Sucursales
                         </h1>
                         <p style={{ fontSize: '1.1rem', color: '#64748b', maxWidth: '600px', margin: '0 auto' }}>
@@ -133,19 +133,19 @@ export default function Catalog() {
                                     overflow: 'hidden'
                                 }}
                             >
-                                <div style={{ width: '64px', height: '64px', borderRadius: '20px', backgroundColor: 'hsl(var(--primary) / 0.05)', color: 'hsl(var(--primary))', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '2rem' }}>
+                                <div style={{ width: '64px', height: '64px', borderRadius: '20px', backgroundColor: '#CFF4D2', color: '#329D9C', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '2rem' }}>
                                     <MapPin size={32} />
                                 </div>
-                                <h3 style={{ fontSize: '1.75rem', fontWeight: 900, marginBottom: '0.5rem', color: '#1e293b' }}>{branch.name}</h3>
+                                <h3 style={{ fontSize: '1.75rem', fontWeight: 900, marginBottom: '0.5rem', color: '#205072' }}>{branch.name}</h3>
                                 <p style={{ fontSize: '0.95rem', color: '#64748b', marginBottom: '2rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                                     <MapPin size={16} opacity={0.4} /> {branch.address || 'Ubicación central'}
                                 </p>
                                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 'auto' }}>
-                                    <span style={{ display: 'flex', alignItems: 'center', color: 'hsl(var(--primary))', fontWeight: 800, fontSize: '0.9rem', gap: '0.5rem' }}>
+                                    <span style={{ display: 'flex', alignItems: 'center', color: '#329D9C', fontWeight: 800, fontSize: '0.9rem', gap: '0.5rem' }}>
                                         Ir al Catálogo <ArrowRight size={18} />
                                     </span>
                                     <div style={{ display: 'flex', gap: '2px' }}>
-                                        {[1, 2, 3, 4, 5].map(i => <Star key={i} size={12} fill="hsl(var(--primary))" color="transparent" />)}
+                                        {[1, 2, 3, 4, 5].map(i => <Star key={i} size={12} fill="#7BE495" color="transparent" />)}
                                     </div>
                                 </div>
                             </div>
@@ -176,10 +176,10 @@ export default function Catalog() {
                 }}>
                     <div style={{ marginBottom: '2.5rem' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.5rem' }}>
-                            <div style={{ width: '40px', height: '40px', backgroundColor: '#1e293b', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white' }}>
+                            <div style={{ width: '40px', height: '40px', backgroundColor: '#205072', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white' }}>
                                 <ShoppingBag size={20} />
                             </div>
-                            <span style={{ fontWeight: 900, fontSize: '1.25rem', color: '#1e293b', letterSpacing: '-0.5px' }}>CASA ORIS</span>
+                            <span style={{ fontWeight: 900, fontSize: '1.25rem', color: '#205072', letterSpacing: '-0.5px' }}>CASA ORIS</span>
                         </div>
                         <p style={{ fontSize: '0.75rem', color: '#94a3b8', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '1px' }}>Categorías</p>
                     </div>
@@ -194,8 +194,8 @@ export default function Catalog() {
                                 padding: '0.875rem 1rem',
                                 borderRadius: '12px',
                                 border: 'none',
-                                backgroundColor: selectedCategory === 'all' ? 'hsl(var(--primary) / 0.05)' : 'transparent',
-                                color: selectedCategory === 'all' ? 'hsl(var(--primary))' : '#64748b',
+                                backgroundColor: selectedCategory === 'all' ? '#CFF4D2' : 'transparent',
+                                color: selectedCategory === 'all' ? '#205072' : '#64748b',
                                 fontWeight: selectedCategory === 'all' ? 800 : 600,
                                 fontSize: '0.9rem',
                                 cursor: 'pointer',
@@ -215,8 +215,8 @@ export default function Catalog() {
                                     padding: '0.875rem 1rem',
                                     borderRadius: '12px',
                                     border: 'none',
-                                    backgroundColor: selectedCategory === cat.id.toString() ? 'hsl(var(--primary) / 0.05)' : 'transparent',
-                                    color: selectedCategory === cat.id.toString() ? 'hsl(var(--primary))' : '#64748b',
+                                    backgroundColor: selectedCategory === cat.id.toString() ? '#CFF4D2' : 'transparent',
+                                    color: selectedCategory === cat.id.toString() ? '#205072' : '#64748b',
                                     fontWeight: selectedCategory === cat.id.toString() ? 800 : 600,
                                     fontSize: '0.9rem',
                                     cursor: 'pointer',
@@ -234,7 +234,7 @@ export default function Catalog() {
                     <div style={{ marginTop: 'auto', paddingTop: '2rem', borderTop: '1px solid #f1f5f9' }}>
                          <button
                             onClick={() => navigate('/catalogo')}
-                            style={{ width: '100%', padding: '0.875rem', borderRadius: '12px', border: '1px solid #e2e8f0', backgroundColor: 'white', color: '#1e293b', fontSize: '0.85rem', fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}
+                            style={{ width: '100%', padding: '0.875rem', borderRadius: '12px', border: '1px solid #CFF4D2', backgroundColor: 'white', color: '#205072', fontSize: '0.85rem', fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}
                         >
                             <MapPin size={16} /> Cambiar Sucursal
                         </button>
@@ -268,12 +268,12 @@ export default function Catalog() {
                         </div>
                         <div style={{ display: 'flex', gap: '1rem' }}>
                              <div style={{ textAlign: 'right' }}>
-                                <p style={{ fontSize: '1rem', fontWeight: 900, color: '#1e293b', margin: 0 }}>{currentBranch?.name}</p>
-                                <p style={{ fontSize: '0.7rem', color: '#94a3b8', margin: 0 }}>{currentBranch?.address}</p>
+                                <p style={{ fontSize: '1rem', fontWeight: 900, color: '#205072', margin: 0 }}>{currentBranch?.name}</p>
+                                <p style={{ fontSize: '0.7rem', color: '#56C596', margin: 0 }}>{currentBranch?.address}</p>
                             </div>
                             <button
                                 onClick={() => setViewMode(viewMode === 'grid' ? 'list' : 'grid')}
-                                style={{ width: '52px', height: '52px', borderRadius: '16px', border: '1px solid #f1f5f9', backgroundColor: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#1e293b', cursor: 'pointer', boxShadow: '0 4px 12px rgba(0,0,0,0.03)' }}
+                                style={{ width: '52px', height: '52px', borderRadius: '16px', border: '1px solid #CFF4D2', backgroundColor: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#205072', cursor: 'pointer', boxShadow: '0 4px 12px rgba(0,0,0,0.03)' }}
                             >
                                 {viewMode === 'grid' ? <List size={22} /> : <LayoutGrid size={22} />}
                             </button>
@@ -287,7 +287,7 @@ export default function Catalog() {
                                 width: '100%',
                                 height: '360px',
                                 borderRadius: '40px',
-                                background: 'linear-gradient(135deg, #1e293b 0%, #334155 100%)',
+                                background: 'linear-gradient(135deg, #205072 0%, #329D9C 100%)',
                                 padding: '4rem',
                                 display: 'flex',
                                 alignItems: 'center',
@@ -296,12 +296,12 @@ export default function Catalog() {
                                 boxShadow: '0 30px 60px -12px rgba(30, 41, 59, 0.25)'
                             }}>
                                 <div style={{ position: 'relative', zIndex: 10, maxWidth: '500px' }}>
-                                    <span style={{ backgroundColor: 'rgba(255,255,255,0.1)', color: 'white', padding: '0.5rem 1rem', borderRadius: '100px', fontSize: '0.75rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '2px', marginBottom: '1.5rem', display: 'inline-block' }}>
+                                    <span style={{ backgroundColor: '#56C596', color: 'white', padding: '0.5rem 1rem', borderRadius: '100px', fontSize: '0.75rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '2px', marginBottom: '1.5rem', display: 'inline-block' }}>
                                         Novedad Exclusiva
                                     </span>
-                                    <h2 style={{ fontSize: '3.5rem', color: 'white', fontWeight: 950, margin: '0 0 1rem 0', lineHeight: 1 }}>Transforma tu <br/><span style={{ color: 'hsl(var(--primary))' }}>Espacio Digital</span></h2>
-                                    <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: '1.1rem', marginBottom: '2.5rem' }}>Descubre la nueva línea de productos de alta tecnología con descuentos exclusivos por tiempo limitado.</p>
-                                    <button style={{ backgroundColor: 'white', color: '#1e293b', border: 'none', padding: '1rem 2rem', borderRadius: '16px', fontWeight: 900, fontSize: '1rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem', transition: 'all 0.3s' }}>
+                                    <h2 style={{ fontSize: '3.5rem', color: 'white', fontWeight: 950, margin: '0 0 1rem 0', lineHeight: 1 }}>Transforma tu <br/><span style={{ color: '#7BE495' }}>Espacio Digital</span></h2>
+                                    <p style={{ color: 'rgba(255,255,255,0.7)', fontSize: '1.1rem', marginBottom: '2.5rem' }}>Descubre la nueva línea de productos de alta tecnología con descuentos exclusivos por tiempo limitado.</p>
+                                    <button style={{ backgroundColor: 'white', color: '#205072', border: 'none', padding: '1rem 2rem', borderRadius: '16px', fontWeight: 900, fontSize: '1rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem', transition: 'all 0.3s' }}>
                                         Comprar Ahora <ArrowRight size={20} />
                                     </button>
                                 </div>
@@ -318,10 +318,10 @@ export default function Catalog() {
                                     { icon: <ShieldCheck size={24}/>, title: 'Compra Segura', sub: '100% Protegido' },
                                     { icon: <Percent size={24}/>, title: 'Ofertas Diarias', sub: 'Los mejores precios' }
                                 ].map((item, i) => (
-                                    <div key={i} style={{ backgroundColor: 'white', padding: '1.5rem', borderRadius: '24px', display: 'flex', alignItems: 'center', gap: '1rem', border: '1px solid #f1f5f9', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.02)' }}>
-                                        <div style={{ color: 'hsl(var(--primary))' }}>{item.icon}</div>
+                                    <div key={i} style={{ backgroundColor: 'white', padding: '1.5rem', borderRadius: '24px', display: 'flex', alignItems: 'center', gap: '1rem', border: '1px solid #CFF4D2', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.02)' }}>
+                                        <div style={{ color: '#329D9C' }}>{item.icon}</div>
                                         <div>
-                                            <p style={{ margin: 0, fontWeight: 800, fontSize: '0.85rem', color: '#1e293b' }}>{item.title}</p>
+                                            <p style={{ margin: 0, fontWeight: 800, fontSize: '0.85rem', color: '#205072' }}>{item.title}</p>
                                             <p style={{ margin: 0, fontSize: '0.7rem', color: '#94a3b8' }}>{item.sub}</p>
                                         </div>
                                     </div>
@@ -332,7 +332,7 @@ export default function Catalog() {
 
                     {/* Products Grid Header */}
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
-                        <h3 style={{ fontSize: '1.75rem', fontWeight: 950, color: '#1e293b' }}>
+                        <h3 style={{ fontSize: '1.75rem', fontWeight: 950, color: '#205072' }}>
                             {selectedCategory === 'all' ? 'Productos Destacados' : categories.find(c => c.id.toString() === selectedCategory)?.name}
                         </h3>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
@@ -403,8 +403,8 @@ export default function Catalog() {
 
                                         <div style={{ padding: '1.5rem', flex: 1, display: 'flex', flexDirection: 'column' }}>
                                             <div style={{ marginBottom: '1.5rem' }}>
-                                                <p style={{ fontSize: '0.7rem', fontWeight: 800, color: 'hsl(var(--primary))', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '0.5rem' }}>{product.category?.name || 'General'}</p>
-                                                <h4 style={{ fontSize: '1.1rem', fontWeight: 900, color: '#1e293b', marginBottom: '0.5rem', lineHeight: 1.3 }}>{product.name}</h4>
+                                                <p style={{ fontSize: '0.7rem', fontWeight: 800, color: '#329D9C', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '0.5rem' }}>{product.category?.name || 'General'}</p>
+                                                <h4 style={{ fontSize: '1.1rem', fontWeight: 900, color: '#205072', marginBottom: '0.5rem', lineHeight: 1.3 }}>{product.name}</h4>
                                                 <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                                                     {[1,2,3,4,5].map(i => <Star key={i} size={12} fill={i <= 4 ? "#fbbf24" : "#e2e8f0"} color="transparent" />)}
                                                     <span style={{ fontSize: '0.7rem', color: '#94a3b8', fontWeight: 600, marginLeft: '4px' }}>(24 Reseñas)</span>
@@ -418,11 +418,11 @@ export default function Catalog() {
                                                             {originalPrice.toFixed(2)} Bs.
                                                         </span>
                                                     )}
-                                                    <p style={{ fontSize: '1.5rem', fontWeight: 950, color: hasOffer ? '#ef4444' : '#1e293b', margin: 0, letterSpacing: '-0.5px' }}>
+                                                    <p style={{ fontSize: '1.5rem', fontWeight: 950, color: hasOffer ? '#ef4444' : '#205072', margin: 0, letterSpacing: '-0.5px' }}>
                                                         {finalPrice.toFixed(2)} <span style={{ fontSize: '0.8rem', fontWeight: 600 }}>Bs.</span>
                                                     </p>
                                                 </div>
-                                                <button style={{ width: '48px', height: '48px', borderRadius: '16px', backgroundColor: '#1e293b', color: 'white', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: 'all 0.3s', boxShadow: '0 8px 16px rgba(30, 41, 59, 0.2)' }}>
+                                                <button style={{ width: '48px', height: '48px', borderRadius: '16px', backgroundColor: '#329D9C', color: 'white', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: 'all 0.3s', boxShadow: '0 8px 16px rgba(50, 157, 156, 0.2)' }}>
                                                     <ShoppingBag size={20} />
                                                 </button>
                                             </div>
@@ -457,7 +457,7 @@ export default function Catalog() {
                 }
                 
                 .product-card button:hover {
-                    background-color: hsl(var(--primary));
+                    background-color: #205072;
                     transform: scale(1.1);
                 }
             `}</style>

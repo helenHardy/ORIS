@@ -10,7 +10,6 @@ export default function ProductModal({ product, onClose, onSave, isSaving, curre
         category_id: '',
         subcategory_id: '',
         brand_id: '',
-        model_id: '',
         description: '',
         price: 0,
         image_url: '',
@@ -20,15 +19,12 @@ export default function ProductModal({ product, onClose, onSave, isSaving, curre
     const [categories, setCategories] = useState([])
     const [subcategories, setSubcategories] = useState([])
     const [brands, setBrands] = useState([])
-    const [models, setModels] = useState([])
     const [isAddingCategory, setIsAddingCategory] = useState(false)
     const [isAddingSubcategory, setIsAddingSubcategory] = useState(false)
     const [isAddingBrand, setIsAddingBrand] = useState(false)
-    const [isAddingModel, setIsAddingModel] = useState(false)
     const [newCategoryName, setNewCategoryName] = useState('')
     const [newSubcategoryName, setNewSubcategoryName] = useState('')
     const [newBrandName, setNewBrandName] = useState('')
-    const [newModelName, setNewModelName] = useState('')
     const [uploadingImage, setUploadingImage] = useState(false)
     const [branchSettings, setBranchSettings] = useState([])
     const [branches, setBranches] = useState([])
@@ -81,7 +77,6 @@ export default function ProductModal({ product, onClose, onSave, isSaving, curre
                 category_id: product.category_id || '',
                 subcategory_id: product.subcategory_id || '',
                 brand_id: product.brand_id || '',
-                model_id: product.model_id || '',
                 description: product.description || '',
                 price: product.price || 0,
                 image_url: product.image_url || '',
@@ -89,20 +84,9 @@ export default function ProductModal({ product, onClose, onSave, isSaving, curre
                 active: product.active ?? true
             })
             fetchProductBranchSettings()
-            if (product.brand_id) {
-                fetchModels(product.brand_id)
-            }
         }
     }, [product, branches])
 
-    async function fetchModels(brandId) {
-        try {
-            const data = await inventoryService.getModels(brandId)
-            setModels(data || [])
-        } catch (err) {
-            console.error('Error fetching models:', err)
-        }
-    }
 
     async function fetchProductBranchSettings() {
         if (!product) return
@@ -206,12 +190,7 @@ export default function ProductModal({ product, onClose, onSave, isSaving, curre
 
     const handleBrandChange = (e) => {
         const brandId = e.target.value
-        setFormData(prev => ({ ...prev, brand_id: brandId, model_id: '' }))
-        if (brandId) {
-            fetchModels(brandId)
-        } else {
-            setModels([])
-        }
+        setFormData(prev => ({ ...prev, brand_id: brandId }))
     }
 
     const handleAddBrand = async () => {
@@ -222,7 +201,7 @@ export default function ProductModal({ product, onClose, onSave, isSaving, curre
             setFormData(prev => ({ ...prev, brand_id: brand.id }))
             setNewBrandName('')
             setIsAddingBrand(false)
-            fetchModels(brand.id)
+
         } catch (err) {
             console.error(err)
             setError('Error al crear marca')
@@ -257,19 +236,6 @@ export default function ProductModal({ product, onClose, onSave, isSaving, curre
         }
     }
 
-    const handleAddModel = async () => {
-        if (!newModelName.trim() || !formData.brand_id) return
-        try {
-            const model = await inventoryService.createModel(newModelName.trim(), formData.brand_id)
-            setModels(prev => [...prev, model].sort((a, b) => a.name.localeCompare(b.name)))
-            setFormData(prev => ({ ...prev, model_id: model.id }))
-            setNewModelName('')
-            setIsAddingModel(false)
-        } catch (err) {
-            console.error(err)
-            setError('Error al crear modelo')
-        }
-    }
 
     const handleImageUpload = async (e) => {
         const file = e.target.files[0]
@@ -297,8 +263,7 @@ export default function ProductModal({ product, onClose, onSave, isSaving, curre
             ...formData,
             category_id: formData.category_id || null,
             subcategory_id: formData.subcategory_id || null,
-            brand_id: formData.brand_id || null,
-            model_id: formData.model_id || null
+            brand_id: formData.brand_id || null
         }
 
         onSave({ ...dataToSave, branch_settings: branchSettings })
@@ -574,7 +539,7 @@ export default function ProductModal({ product, onClose, onSave, isSaving, curre
                             </div>
 
                             {/* Middle Section: Categorization */}
-                            <div style={{ gridColumn: 'span 12', padding: '1.5rem', backgroundColor: 'hsl(var(--secondary) / 0.1)', borderRadius: '16px', display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1.5rem' }}>
+                            <div style={{ gridColumn: 'span 12', padding: '1.5rem', backgroundColor: 'hsl(var(--secondary) / 0.1)', borderRadius: '16px', display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1.5rem' }}>
 
                                 <div style={inputWrapperStyle}>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -629,25 +594,6 @@ export default function ProductModal({ product, onClose, onSave, isSaving, curre
                                         <select name="brand_id" value={formData.brand_id} onChange={handleBrandChange} disabled={readOnly} style={{ ...inputStyle, backgroundColor: readOnly ? 'hsl(var(--secondary) / 0.2)' : 'hsl(var(--background))' }}>
                                             <option value="">Seleccionar...</option>
                                             {brands.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
-                                        </select>
-                                    )}
-                                </div>
-
-                                <div style={inputWrapperStyle}>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                        <label style={labelStyle}><Layers size={14} style={{ marginRight: 4 }} /> Modelo</label>
-                                        {!readOnly && <button type="button" onClick={() => setIsAddingModel(true)} disabled={!formData.brand_id} style={{ fontSize: '0.7rem', color: formData.brand_id ? 'hsl(var(--primary))' : 'gray', border: 'none', background: 'none', cursor: formData.brand_id ? 'pointer' : 'not-allowed', fontWeight: 'bold' }}>+ Nuevo</button>}
-                                    </div>
-                                    {isAddingModel ? (
-                                        <div style={{ display: 'flex', gap: '0.25rem' }}>
-                                            <input autoFocus value={newModelName} onChange={(e) => setNewModelName(e.target.value)} style={{ ...inputStyle, flex: 1 }} placeholder="Nombre..." />
-                                            <button type="button" onClick={handleAddModel} className="btn btn-primary" style={{ padding: '0 0.5rem' }}><Save size={16} /></button>
-                                            <button type="button" onClick={() => setIsAddingModel(false)} className="btn btn-secondary" style={{ padding: '0 0.5rem' }}><X size={16} /></button>
-                                        </div>
-                                    ) : (
-                                        <select name="model_id" value={formData.model_id} onChange={handleChange} disabled={!formData.brand_id || readOnly} style={{ ...inputStyle, opacity: (!formData.brand_id || readOnly) ? 0.6 : 1, backgroundColor: readOnly ? 'hsl(var(--secondary) / 0.2)' : 'hsl(var(--background))' }}>
-                                            <option value="">{formData.brand_id ? 'Seleccionar...' : 'Elija Marca primero'}</option>
-                                            {models.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
                                         </select>
                                     )}
                                 </div>

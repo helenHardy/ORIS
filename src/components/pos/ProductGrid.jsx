@@ -27,7 +27,6 @@ export default function ProductGrid({ searchTerm, branchId, category, onAddToCar
                     category:categories(name),
                     subcategory:subcategories(name),
                     brand:brands(name),
-                    model:models(name),
                     settings:product_branch_settings!inner(*),
                     tiered_prices:product_tiered_prices(*)
                 `)
@@ -252,9 +251,6 @@ export default function ProductGrid({ searchTerm, branchId, category, onAddToCar
                                             <span style={{ fontSize: '0.6rem', fontWeight: '800', padding: '1px 5px', backgroundColor: 'hsl(var(--primary) / 0.1)', color: 'hsl(var(--primary))', borderRadius: '4px', textTransform: 'uppercase' }}>
                                                 {product.brand?.name || 'Sin Marca'}
                                             </span>
-                                            <span style={{ fontSize: '0.65rem', fontWeight: '700', padding: '1px 5px', backgroundColor: 'hsl(var(--secondary) / 0.6)', color: 'hsl(var(--secondary-foreground) / 0.7)', borderRadius: '4px' }}>
-                                                {product.model?.name || 'N/A'}
-                                            </span>
                                         </div>
                                         <p style={{ fontSize: '0.7rem', fontWeight: '800', opacity: 0.5, letterSpacing: '0.05em' }}>
                                             SKU: <span style={{ color: 'hsl(var(--foreground))' }}>{product.sku || 'N/A'}</span>
@@ -352,9 +348,6 @@ export default function ProductGrid({ searchTerm, branchId, category, onAddToCar
                                         <div style={{ display: 'flex', gap: '4px' }}>
                                             <span style={{ fontSize: '0.65rem', fontWeight: '800', color: 'hsl(var(--primary))', opacity: 0.8 }}>
                                                 {product.brand?.name}
-                                            </span>
-                                            <span style={{ fontSize: '0.65rem', fontWeight: '600', opacity: 0.4 }}>
-                                                {product.model?.name ? `- ${product.model.name}` : ''}
                                             </span>
                                         </div>
                                     </div>
