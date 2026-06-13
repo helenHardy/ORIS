@@ -108,7 +108,7 @@ export default function Login() {
                             letterSpacing: '-0.025em',
                             marginBottom: '0.5rem'
                         }}>
-                            Gacia <span style={{ color: 'hsl(var(--primary))' }}>ERP</span>
+                            CASA <span style={{ color: 'hsl(var(--primary))' }}>ORIS</span>
                         </h1>
                         <p style={{
                             color: 'rgba(255, 255, 255, 0.5)',
@@ -148,7 +148,7 @@ export default function Login() {
                                     required
                                     value={email}
                                     onChange={(e) => setEmail(e.target.value)}
-                                    placeholder="ejemplo@gacia.com"
+                                    placeholder="ejemplo@casaoris.com"
                                     style={{
                                         width: '100%',
                                         padding: '0.85rem 1rem 0.85rem 3rem',
@@ -283,7 +283,7 @@ export default function Login() {
                     fontSize: '0.85rem',
                     fontWeight: '500'
                 }}>
-                    &copy; {new Date().getFullYear()} Gacia Soluciones Tecnológicas. <br />
+                    &copy; {new Date().getFullYear()} Casa Oris. <br />
                     Todos los derechos reservados.
                 </p>
             </div>

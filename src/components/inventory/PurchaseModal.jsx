@@ -256,6 +256,7 @@ export default function PurchaseModal({ onClose, onSave, isSaving, initialData, 
                                     <h3 style={sectionTitleStyle}>Abono Inicial</h3>
                                     <input
                                         type="number"
+                                        onWheel={(e) => e.target.blur()}
                                         step="0.01"
                                         style={inputStyle}
                                         placeholder="0.00"
@@ -300,7 +301,7 @@ export default function PurchaseModal({ onClose, onSave, isSaving, initialData, 
                                     <div style={{ gridColumn: 'span 3', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', padding: '1rem', backgroundColor: 'hsl(var(--primary) / 0.1)', borderRadius: '12px' }}>
                                         <div>
                                             <label style={{ fontSize: '0.75rem', fontWeight: '800', opacity: 0.6 }}>MONTO EFECTIVO</label>
-                                            <input type="number" style={inputStyle} value={amountCash} onChange={(e) => {
+                                            <input type="number" onWheel={(e) => e.target.blur()} style={inputStyle} value={amountCash} onChange={(e) => {
                                                 const val = parseFloat(e.target.value) || 0
                                                 setAmountCash(val)
                                                 setAmountQr(Math.max(0, initialPayment - val))
@@ -308,7 +309,7 @@ export default function PurchaseModal({ onClose, onSave, isSaving, initialData, 
                                         </div>
                                         <div>
                                             <label style={{ fontSize: '0.75rem', fontWeight: '800', opacity: 0.6 }}>MONTO QR</label>
-                                            <input type="number" style={inputStyle} value={amountQr} onChange={(e) => {
+                                            <input type="number" onWheel={(e) => e.target.blur()} style={inputStyle} value={amountQr} onChange={(e) => {
                                                 const val = parseFloat(e.target.value) || 0
                                                 setAmountQr(val)
                                                 setAmountCash(Math.max(0, initialPayment - val))
@@ -348,7 +349,7 @@ export default function PurchaseModal({ onClose, onSave, isSaving, initialData, 
                                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', padding: '1rem', backgroundColor: 'hsl(var(--secondary) / 0.1)', borderRadius: '12px' }}>
                                         <div>
                                             <label style={{ fontSize: '0.75rem', fontWeight: '800', opacity: 0.6 }}>MONTO EFECTIVO</label>
-                                            <input type="number" style={inputStyle} value={amountCash} onChange={(e) => {
+                                            <input type="number" onWheel={(e) => e.target.blur()} style={inputStyle} value={amountCash} onChange={(e) => {
                                                 const val = parseFloat(e.target.value) || 0
                                                 setAmountCash(val)
                                                 setAmountQr(Math.max(0, total - val))
@@ -356,7 +357,7 @@ export default function PurchaseModal({ onClose, onSave, isSaving, initialData, 
                                         </div>
                                         <div>
                                             <label style={{ fontSize: '0.75rem', fontWeight: '800', opacity: 0.6 }}>MONTO QR</label>
-                                            <input type="number" style={inputStyle} value={amountQr} onChange={(e) => {
+                                            <input type="number" onWheel={(e) => e.target.blur()} style={inputStyle} value={amountQr} onChange={(e) => {
                                                 const val = parseFloat(e.target.value) || 0
                                                 setAmountQr(val)
                                                 setAmountCash(Math.max(0, total - val))
@@ -429,12 +430,12 @@ export default function PurchaseModal({ onClose, onSave, isSaving, initialData, 
                                                     </td>
                                                     <td style={{ padding: '1rem' }}>
                                                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                                                            <input type="number" value={item.quantity} onChange={(e) => updateItem(item.product_id, 'quantity', e.target.value)} disabled={readOnly} style={{ ...inputStyle, textAlign: 'center', backgroundColor: 'white', flex: 1 }} />
+                                                            <input type="number" onWheel={(e) => e.target.blur()} value={item.quantity} onChange={(e) => updateItem(item.product_id, 'quantity', e.target.value)} disabled={readOnly} style={{ ...inputStyle, textAlign: 'center', backgroundColor: 'white', flex: 1 }} />
                                                             <span style={{ fontSize: '0.7rem', fontWeight: '800', opacity: 0.5, minWidth: '35px' }}>{item.unit_of_measure || 'Unid.'}</span>
                                                         </div>
                                                     </td>
                                                     <td style={{ padding: '1rem' }}>
-                                                        <input type="number" step="0.01" value={item.unit_cost} onChange={(e) => updateItem(item.product_id, 'unit_cost', e.target.value)} disabled={readOnly} style={{ ...inputStyle, textAlign: 'center', backgroundColor: 'white' }} />
+                                                        <input type="number" onWheel={(e) => e.target.blur()} step="0.01" value={item.unit_cost} onChange={(e) => updateItem(item.product_id, 'unit_cost', e.target.value)} disabled={readOnly} style={{ ...inputStyle, textAlign: 'center', backgroundColor: 'white' }} />
                                                     </td>
                                                     <td style={{ padding: '1rem', textAlign: 'right', fontWeight: '800' }}>{currencySymbol}{item.total.toFixed(2)}</td>
                                                     <td style={{ padding: '1rem', textAlign: 'right' }}>

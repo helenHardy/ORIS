@@ -7,6 +7,19 @@ import KardexDrawer from '../components/inventory/KardexDrawer'
 import MermaModal from '../components/inventory/MermaModal'
 import ImportModal from '../components/inventory/ImportModal'
 
+const getFirstImageUrl = (url) => {
+    if (!url) return '';
+    if (url.startsWith('[') && url.endsWith(']')) {
+        try {
+            const parsed = JSON.parse(url);
+            return Array.isArray(parsed) ? parsed[0] || '' : url;
+        } catch (e) {
+            return url;
+        }
+    }
+    return url;
+};
+
 export default function Inventory() {
     const [products, setProducts] = useState([])
     const [branches, setBranches] = useState([])
@@ -809,7 +822,7 @@ export default function Inventory() {
                                             transition: 'transform 0.2s'
                                         }} className="product-image-container">
                                             {product.image_url ? (
-                                                <img src={product.image_url} alt={product.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                                <img src={getFirstImageUrl(product.image_url)} alt={product.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                                             ) : (
                                                 <Package size={24} style={{ opacity: 0.15 }} />
                                             )}

@@ -2,6 +2,19 @@ import React, { useState, useEffect } from 'react'
 import { supabase } from '../../lib/supabase'
 import { RefreshCw, Package, Tag, Plus } from 'lucide-react'
 
+const getFirstImageUrl = (url) => {
+    if (!url) return '';
+    if (url.startsWith('[') && url.endsWith(']')) {
+        try {
+            const parsed = JSON.parse(url);
+            return Array.isArray(parsed) ? parsed[0] || '' : url;
+        } catch (e) {
+            return url;
+        }
+    }
+    return url;
+};
+
 export default function ProductGrid({ searchTerm, branchId, category, onAddToCart, currencySymbol = 'Bs.', refreshKey, viewMode = 'grid', onlyMermas = false }) {
     const [products, setProducts] = useState([])
     const [loading, setLoading] = useState(true)
@@ -188,7 +201,7 @@ export default function ProductGrid({ searchTerm, branchId, category, onAddToCar
                                     overflow: 'hidden'
                                 }}>
                                     {product.image_url ? (
-                                        <img src={product.image_url} alt={product.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                        <img src={getFirstImageUrl(product.image_url)} alt={product.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                                     ) : (
                                         <Package size={48} style={{ opacity: 0.1 }} />
                                     )}
@@ -335,7 +348,7 @@ export default function ProductGrid({ searchTerm, branchId, category, onAddToCar
                                     overflow: 'hidden'
                                 }}>
                                     {product.image_url ? (
-                                        <img src={product.image_url} alt={product.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                        <img src={getFirstImageUrl(product.image_url)} alt={product.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                                     ) : (
                                         <Package size={24} style={{ opacity: 0.2 }} />
                                     )}

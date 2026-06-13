@@ -30,6 +30,9 @@ export default function ProductModal({ product, onClose, onSave, isSaving, curre
     const [branches, setBranches] = useState([])
     const [loadingBranches, setLoadingBranches] = useState(true)
     const [error, setError] = useState(null)
+    const [images, setImages] = useState([])
+    const [activeImageIndex, setActiveImageIndex] = useState(0)
+
 
     useEffect(() => {
         fetchInitialData()
@@ -71,6 +74,20 @@ export default function ProductModal({ product, onClose, onSave, isSaving, curre
 
     useEffect(() => {
         if (product) {
+            let parsedImages = [];
+            if (product.image_url) {
+                if (product.image_url.startsWith('[') && product.image_url.endsWith(']')) {
+                    try {
+                        parsedImages = JSON.parse(product.image_url);
+                    } catch (e) {
+                        parsedImages = [product.image_url];
+                    }
+                } else {
+                    parsedImages = [product.image_url];
+                }
+            }
+            setImages(parsedImages);
+            setActiveImageIndex(0);
             setFormData({
                 name: product.name || '',
                 sku: product.sku || '',
@@ -84,6 +101,21 @@ export default function ProductModal({ product, onClose, onSave, isSaving, curre
                 active: product.active ?? true
             })
             fetchProductBranchSettings()
+        } else {
+            setImages([]);
+            setActiveImageIndex(0);
+            setFormData({
+                name: '',
+                sku: '',
+                category_id: '',
+                subcategory_id: '',
+                brand_id: '',
+                description: '',
+                price: 0,
+                image_url: '',
+                unit_of_measure: 'Unidad',
+                active: true
+            })
         }
     }, [product, branches])
 
@@ -243,13 +275,32 @@ export default function ProductModal({ product, onClose, onSave, isSaving, curre
         try {
             setUploadingImage(true)
             const publicUrl = await inventoryService.uploadProductImage(file)
-            setFormData(prev => ({ ...prev, image_url: publicUrl }))
+            setImages(prev => {
+                const updated = [...prev, publicUrl]
+                setActiveImageIndex(updated.length - 1)
+                return updated
+            })
         } catch (err) {
             console.error(err)
             setError('Error al subir imagen. Asegúrate de que el bucket "product-images" sea público.')
         } finally {
             setUploadingImage(false)
         }
+    }
+
+    const handleDeleteImage = (indexToDelete) => {
+        setImages(prev => {
+            const updated = prev.filter((_, idx) => idx !== indexToDelete)
+            // Adjust active image index
+            if (activeImageIndex >= updated.length) {
+                setActiveImageIndex(Math.max(0, updated.length - 1))
+            }
+            return updated
+        })
+    }
+
+    const handleSelectImage = (index) => {
+        setActiveImageIndex(index)
     }
 
     const handleSubmit = (e) => {
@@ -261,6 +312,7 @@ export default function ProductModal({ product, onClose, onSave, isSaving, curre
 
         const dataToSave = {
             ...formData,
+            image_url: images.length > 0 ? JSON.stringify(images) : '',
             category_id: formData.category_id || null,
             subcategory_id: formData.subcategory_id || null,
             brand_id: formData.brand_id || null
@@ -394,36 +446,31 @@ export default function ProductModal({ product, onClose, onSave, isSaving, curre
                                         border: '2px dashed hsl(var(--border))',
                                         overflow: 'hidden',
                                         position: 'relative',
-                                        cursor: 'pointer',
-                                        transition: 'all 0.3s ease'
+                                        transition: 'all 0.3s ease',
+                                        marginBottom: '1rem'
                                     }}>
-                                        {formData.image_url ? (
+                                        {images.length > 0 ? (
                                             <>
-                                                <img src={formData.image_url} alt="Preview" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
-                                                <div style={{ position: 'absolute', top: 10, right: 10, display: 'flex', gap: '5px' }}>
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => setFormData(prev => ({ ...prev, image_url: '' }))}
-                                                        className="shadow-lg"
-                                                        style={{ backgroundColor: 'hsl(var(--destructive))', color: 'white', border: 'none', borderRadius: '8px', width: '32px', height: '32px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                                                    >
-                                                        <Trash2 size={16} />
-                                                    </button>
-                                                </div>
+                                                <img src={images[activeImageIndex]} alt="Preview" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+                                                {!readOnly && (
+                                                    <div style={{ position: 'absolute', top: 10, right: 10, display: 'flex', gap: '5px' }}>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => handleDeleteImage(activeImageIndex)}
+                                                            className="shadow-lg"
+                                                            style={{ backgroundColor: 'hsl(var(--destructive))', color: 'white', border: 'none', borderRadius: '8px', width: '32px', height: '32px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                                                            title="Eliminar esta imagen"
+                                                        >
+                                                            <Trash2 size={16} />
+                                                        </button>
+                                                    </div>
+                                                )}
                                             </>
                                         ) : (
                                             <div style={{ textAlign: 'center', padding: '1rem' }}>
                                                 <ImageIcon size={48} style={{ opacity: 0.2, marginBottom: '0.5rem' }} />
-                                                <p style={{ fontSize: '0.75rem', fontWeight: '500', opacity: 0.5 }}>Arrastra o haz clic para subir</p>
+                                                <p style={{ fontSize: '0.75rem', fontWeight: '500', opacity: 0.5 }}>Haz clic abajo o arrastra para subir imágenes</p>
                                             </div>
-                                        )}
-                                        {!readOnly && (
-                                            <input
-                                                type="file"
-                                                accept="image/*"
-                                                onChange={handleImageUpload}
-                                                style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer' }}
-                                            />
                                         )}
                                         {uploadingImage && (
                                             <div style={{ position: 'absolute', inset: 0, backgroundColor: 'rgba(255,255,255,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -431,7 +478,88 @@ export default function ProductModal({ product, onClose, onSave, isSaving, curre
                                             </div>
                                         )}
                                     </div>
-                                    <p style={{ fontSize: '0.7rem', opacity: 0.5, marginTop: '0.75rem', textAlign: 'center' }}>Formatos soportados: JPG, PNG, WebP (Máx 5MB)</p>
+
+                                    {/* Thumbnail gallery */}
+                                    <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
+                                        {images.map((imgUrl, idx) => (
+                                            <div
+                                                key={idx}
+                                                onClick={() => handleSelectImage(idx)}
+                                                style={{
+                                                    width: '56px',
+                                                    height: '56px',
+                                                    borderRadius: '8px',
+                                                    border: idx === activeImageIndex ? '2px solid hsl(var(--primary))' : '1px solid hsl(var(--border) / 0.6)',
+                                                    backgroundColor: 'hsl(var(--secondary) / 0.2)',
+                                                    cursor: 'pointer',
+                                                    position: 'relative',
+                                                    overflow: 'hidden',
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    justifyContent: 'center',
+                                                    transition: 'all 0.2s'
+                                                }}
+                                            >
+                                                <img src={imgUrl} alt={`Thumb ${idx}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                                {!readOnly && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            handleDeleteImage(idx);
+                                                        }}
+                                                        style={{
+                                                            position: 'absolute',
+                                                            top: '2px',
+                                                            right: '2px',
+                                                            backgroundColor: 'rgba(0,0,0,0.6)',
+                                                            color: 'white',
+                                                            border: 'none',
+                                                            borderRadius: '50%',
+                                                            width: '16px',
+                                                            height: '16px',
+                                                            fontSize: '10px',
+                                                            display: 'flex',
+                                                            alignItems: 'center',
+                                                            justifyContent: 'center',
+                                                            cursor: 'pointer',
+                                                            opacity: 0.7
+                                                        }}
+                                                        title="Eliminar"
+                                                    >
+                                                        &times;
+                                                    </button>
+                                                )}
+                                            </div>
+                                        ))}
+
+                                        {!readOnly && (
+                                            <div
+                                                style={{
+                                                    width: '56px',
+                                                    height: '56px',
+                                                    borderRadius: '8px',
+                                                    border: '2px dashed hsl(var(--border))',
+                                                    backgroundColor: 'hsl(var(--secondary) / 0.1)',
+                                                    position: 'relative',
+                                                    cursor: 'pointer',
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    justifyContent: 'center',
+                                                    transition: 'all 0.2s'
+                                                }}
+                                            >
+                                                <Plus size={20} style={{ opacity: 0.5 }} />
+                                                <input
+                                                    type="file"
+                                                    accept="image/*"
+                                                    onChange={handleImageUpload}
+                                                    style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer' }}
+                                                />
+                                            </div>
+                                        )}
+                                    </div>
+                                    <p style={{ fontSize: '0.7rem', opacity: 0.5, marginTop: '0.75rem', textAlign: 'left' }}>Formatos soportados: JPG, PNG, WebP (Máx 5MB). La primera imagen será la principal.</p>
                                 </div>
 
                                 <div style={{ gridColumn: 'span 8', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>

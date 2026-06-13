@@ -8,6 +8,19 @@ import {
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 
+const getFirstImageUrl = (url) => {
+    if (!url) return '';
+    if (url.startsWith('[') && url.endsWith(']')) {
+        try {
+            const parsed = JSON.parse(url);
+            return Array.isArray(parsed) ? parsed[0] || '' : url;
+        } catch (e) {
+            return url;
+        }
+    }
+    return url;
+};
+
 export default function Catalog() {
     const { branchId } = useParams()
     const navigate = useNavigate()
@@ -389,7 +402,7 @@ export default function Catalog() {
                                             overflow: 'hidden'
                                         }}>
                                             {product.image_url ? (
-                                                <img src={product.image_url} alt={product.name} style={{ width: '100%', height: '100%', objectFit: 'cover', transition: 'transform 0.5s' }} className="product-image" />
+                                                <img src={getFirstImageUrl(product.image_url)} alt={product.name} style={{ width: '100%', height: '100%', objectFit: 'cover', transition: 'transform 0.5s' }} className="product-image" />
                                             ) : (
                                                 <Package size={64} style={{ color: '#cbd5e1' }} />
                                             )}

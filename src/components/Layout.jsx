@@ -172,7 +172,7 @@ export default function Layout() {
                                 </span>
                             </div>
                         ) : (
-                            <span className="brand-title">Gacia ERP</span>
+                            <span className="brand-title">CASA ORIS</span>
                         )
                     )}
                     {collapsed && (
@@ -188,7 +188,7 @@ export default function Layout() {
                                 }}
                             />
                         ) : (
-                            <span className="brand-title" style={{ fontSize: '1.5rem' }}>G</span>
+                            <span className="brand-title" style={{ fontSize: '1.5rem' }}>O</span>
                         )
                     )}
                 </div>

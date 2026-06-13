@@ -65,7 +65,7 @@ export default function Settings() {
             const url = window.URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = 'gacia_full_schema.sql';
+            a.download = 'oris_full_schema.sql';
             document.body.appendChild(a);
             a.click();
             window.URL.revokeObjectURL(url);

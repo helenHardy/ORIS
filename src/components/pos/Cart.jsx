@@ -1,6 +1,19 @@
 import React from 'react'
 import { Plus, Minus, Trash2, Package, ShoppingCart, Box } from 'lucide-react'
 
+const getFirstImageUrl = (url) => {
+    if (!url) return '';
+    if (url.startsWith('[') && url.endsWith(']')) {
+        try {
+            const parsed = JSON.parse(url);
+            return Array.isArray(parsed) ? parsed[0] || '' : url;
+        } catch (e) {
+            return url;
+        }
+    }
+    return url;
+};
+
 export default function Cart({ items, onRemove, onUpdateQuantity, onSetQuantity, onSetPrice, onToggleDamaged, currencySymbol = 'Bs.' }) {
     if (items.length === 0) {
         return (
@@ -46,7 +59,7 @@ export default function Cart({ items, onRemove, onUpdateQuantity, onSetQuantity,
                         overflow: 'hidden'
                     }}>
                         {item.image_url ? (
-                            <img src={item.image_url} alt={item.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                            <img src={getFirstImageUrl(item.image_url)} alt={item.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                         ) : (
                             <Box size={20} opacity={0.4} />
                         )}

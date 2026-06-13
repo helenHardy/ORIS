@@ -361,9 +361,9 @@ export default function Quotations() {
                 <body>
                     <div class="header">
                         <div class="company-info">
-                            <h1>Gacia Store</h1>
-                            <p>Av. Principal #123, Ciudad</p>
-                            <p>Tel: (555) 123-4567 | info@gaciastore.com</p>
+                            <h1>Casa Oris</h1>
+                            <p>Zona Villa Adela, Calle "J" #2</p>
+                            <p>Tel: 76282003 | info@casaoris.com</p>
                         </div>
                         <div class="invoice-details">
                             <h2>COTIZACIÓN</h2>

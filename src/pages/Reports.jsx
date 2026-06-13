@@ -3,6 +3,19 @@ import { FileText, Calendar, Filter, Download, ChevronDown, DollarSign, Package,
 import { supabase } from '../lib/supabase'
 import SalesChart from '../components/dashboard/SalesChart'
 
+const getFirstImageUrl = (url) => {
+    if (!url) return '';
+    if (url.startsWith('[') && url.endsWith(']')) {
+        try {
+            const parsed = JSON.parse(url);
+            return Array.isArray(parsed) ? parsed[0] || '' : url;
+        } catch (e) {
+            return url;
+        }
+    }
+    return url;
+};
+
 // Helper for date formatting
 const formatDate = (date) => date.toISOString().split('T')[0]
 
@@ -393,7 +406,7 @@ export default function Reports() {
                                                 <td style={{ padding: '1rem 2rem', display: 'flex', alignItems: 'center', gap: '1rem' }}>
                                                     <div style={{ width: '40px', height: '40px', borderRadius: '8px', backgroundColor: 'hsl(var(--secondary))', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
                                                         {item.image_url ? (
-                                                            <img src={item.image_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                                            <img src={getFirstImageUrl(item.image_url)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                                                         ) : (
                                                             <Package size={20} opacity={0.5} />
                                                         )}
