@@ -12,7 +12,10 @@ export default function Customers() {
     const [error, setError] = useState(null)
     const [searchTerm, setSearchTerm] = useState('')
     const [cashBoxes, setCashBoxes] = useState([])
-    const [selectedBranchId, setSelectedBranchId] = useState(null)
+    const [onlyDebtors, setOnlyDebtors] = useState(false)
+    const [page, setPage] = useState(1)
+    const pageSize = 20
+    const [total, setTotal] = useState(0)
 
     // Modal state
     const [isModalOpen, setIsModalOpen] = useState(false)
@@ -29,16 +32,20 @@ export default function Customers() {
     })
 
     useEffect(() => {
-        fetchCustomers()
         fetchUserBranch()
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [])
+
+    useEffect(() => {
+        fetchCustomers()
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [page, pageSize, onlyDebtors, searchTerm])
 
     async function fetchUserBranch() {
         const { data: { user } } = await supabase.auth.getUser()
         if (!user) return
         const { data } = await supabase.from('user_branches').select('branch_id').eq('user_id', user.id).limit(1).single()
         if (data) {
-            setSelectedBranchId(data.branch_id)
             fetchCashBoxes(data.branch_id)
         }
     }
@@ -53,14 +60,24 @@ export default function Customers() {
         try {
             setLoading(true)
             setError(null)
-            const { data, error } = await supabase
+            let query = supabase
                 .from('customers')
-                .select('*')
-                .order('name')
+                .select('*', { count: 'exact' })
+
+            if (onlyDebtors) query = query.gt('current_balance', 0)
+            if (searchTerm.trim()) {
+                const term = searchTerm.trim()
+                query = query.or(`name.ilike.%${term}%,tax_id.ilike.%${term}%,phone.ilike.%${term}%`)
+            }
+
+            query = query.order('name')
+            const from = (page - 1) * pageSize
+            const { data, count, error } = await query.range(from, from + pageSize - 1)
 
             if (error) throw error
             setCustomers(data || [])
-            calculateMetrics(data || [])
+            setTotal(count || 0)
+            fetchMetrics()
         } catch (err) {
             console.error('Error fetching customers:', err)
             setError('Error al cargar la lista de clientes.')
@@ -69,13 +86,21 @@ export default function Customers() {
         }
     }
 
-    const calculateMetrics = (data) => {
-        const total = data.length
-        const active = data.filter(c => c.active).length
-        const inactive = total - active
-        const totalDebt = data.reduce((sum, c) => sum + (c.current_balance || 0), 0)
+    async function fetchMetrics() {
+        try {
+            const { count: total, error: e1 } = await supabase
+                .from('customers').select('id', { count: 'exact', head: true })
+            const { count: active, error: e2 } = await supabase
+                .from('customers').select('id', { count: 'exact', head: true }).eq('active', true)
+            const { data, error: e3 } = await supabase
+                .from('customers').select('current_balance')
 
-        setMetrics({ total, active, inactive, totalDebt })
+            if (e1 || e2 || e3) throw e1 || e2 || e3
+            const totalDebt = (data || []).reduce((sum, c) => sum + (c.current_balance || 0), 0)
+            setMetrics({ total: total || 0, active: active || 0, inactive: (total || 0) - (active || 0), totalDebt })
+        } catch (err) {
+            console.error('Error fetching customer metrics:', err)
+        }
     }
 
     // Toast state
@@ -126,10 +151,11 @@ export default function Customers() {
     const handleSavePayment = async (paymentData) => {
         try {
             setIsSaving(true)
-            // 1. Insert payment record
+            // 1. Insert payment record (include authed user for cash movement trigger)
+            const { data: { user } } = await supabase.auth.getUser()
             const { error: pError } = await supabase
                 .from('customer_payments')
-                .insert([paymentData])
+                .insert([{ ...paymentData, user_id: user?.id || null }])
             if (pError) throw pError
 
             // Balance is now updated automatically by database trigger trg_customer_payments_balance
@@ -200,10 +226,7 @@ export default function Customers() {
         }
     }
 
-    const filteredCustomers = customers.filter(c =>
-        (c.name?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
-        (c.tax_id?.toLowerCase() || '').includes(searchTerm.toLowerCase())
-    )
+    const filteredCustomers = customers
 
     return (
         <div style={{ position: 'relative', paddingBottom: '2rem', display: 'flex', flexDirection: 'column', gap: '2rem' }}>
@@ -327,8 +350,21 @@ export default function Customers() {
                         placeholder="Buscar por nombre, NIT o teléfono..."
                         style={{ flex: 1, border: 'none', outline: 'none', fontSize: '1rem', padding: '0.5rem' }}
                         value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
+                        onChange={(e) => { setSearchTerm(e.target.value); setPage(1) }}
                     />
+                    <button
+                        onClick={() => { setOnlyDebtors(v => !v); setPage(1) }}
+                        style={{
+                            display: 'flex', alignItems: 'center', gap: '0.5rem',
+                            padding: '0.6rem 1rem', borderRadius: '12px', fontWeight: '800', fontSize: '0.85rem',
+                            border: 'none', cursor: 'pointer', whiteSpace: 'nowrap',
+                            backgroundColor: onlyDebtors ? 'hsl(var(--destructive) / 0.12)' : 'hsl(var(--secondary) / 0.6)',
+                            color: onlyDebtors ? 'hsl(var(--destructive))' : 'hsl(var(--muted-foreground))'
+                        }}
+                        title="Mostrar solo clientes con saldo pendiente"
+                    >
+                        {onlyDebtors ? '✓ SOLO DEUDORES' : 'SOLO DEUDORES'}
+                    </button>
                 </div>
 
                 {error && (
@@ -349,6 +385,7 @@ export default function Customers() {
                         <p style={{ maxWidth: '400px', margin: '0 auto' }}>Registra tus clientes para habilitar ventas personalizadas, créditos y seguimiento de cuentas.</p>
                     </div>
                 ) : (
+                    <>
                     <div style={{ overflowX: 'auto' }}>
                         <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: '0 0.5rem' }}>
                             <thead>
@@ -448,6 +485,34 @@ export default function Customers() {
                             </tbody>
                         </table>
                     </div>
+
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', flexWrap: 'wrap', marginTop: '1.5rem', paddingTop: '1.25rem', borderTop: '1px solid hsl(var(--border) / 0.5)' }}>
+                        <span style={{ fontSize: '0.85rem', fontWeight: '600', color: 'hsl(var(--muted-foreground))' }}>
+                            Mostrando {customers.length === 0 ? 0 : (page - 1) * pageSize + 1}–{Math.min(page * pageSize, total)} de {total} {onlyDebtors ? 'deudores' : 'clientes'}
+                        </span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                            <button
+                                className="btn"
+                                disabled={page <= 1}
+                                onClick={() => setPage(p => Math.max(1, p - 1))}
+                                style={{ padding: '0.5rem 1rem', borderRadius: '10px', fontWeight: '700', fontSize: '0.85rem', opacity: page <= 1 ? 0.4 : 1, cursor: page <= 1 ? 'not-allowed' : 'pointer' }}
+                            >
+                                Anterior
+                            </button>
+                            <span style={{ fontSize: '0.9rem', fontWeight: '800', minWidth: '5rem', textAlign: 'center' }}>
+                                Página {page} de {Math.max(1, Math.ceil(total / pageSize))}
+                            </span>
+                            <button
+                                className="btn"
+                                disabled={page * pageSize >= total}
+                                onClick={() => setPage(p => p + 1)}
+                                style={{ padding: '0.5rem 1rem', borderRadius: '10px', fontWeight: '700', fontSize: '0.85rem', opacity: page * pageSize >= total ? 0.4 : 1, cursor: page * pageSize >= total ? 'not-allowed' : 'pointer' }}
+                            >
+                                Siguiente
+                            </button>
+                        </div>
+                    </div>
+                    </>
                 )}
             </div>
 

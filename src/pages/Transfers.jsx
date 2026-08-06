@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react'
-import { Plus, Search, ArrowRight, RefreshCw, AlertTriangle, Clock, CheckCircle, Ship, XCircle, ChevronRight, X, Trash2, Eye, Edit2, Box, ArrowLeftRight, Truck, MapPin, Calendar, User } from 'lucide-react'
+import { Plus, Search, ArrowRight, RefreshCw, AlertTriangle, Clock, CheckCircle, Ship, XCircle, ChevronRight, X, Trash2, Eye, Edit2, Box, ArrowLeftRight, Truck, MapPin, Calendar, User, Printer } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { printHTML } from '../lib/print'
 import TransferModal from '../components/inventory/TransferModal'
 import TransferDetailModal from '../components/inventory/TransferDetailModal'
+import Pagination from '../components/common/Pagination'
 
 export default function Transfers() {
     const [transfers, setTransfers] = useState([])
@@ -26,6 +28,11 @@ export default function Transfers() {
         received: 0
     })
 
+    // Pagination state
+    const [page, setPage] = useState(1)
+    const [totalTransfers, setTotalTransfers] = useState(0)
+    const pageSize = 9
+
     useEffect(() => {
         if (toast) {
             const timer = setTimeout(() => setToast(null), 3000)
@@ -39,8 +46,12 @@ export default function Transfers() {
 
     useEffect(() => {
         checkUserRole()
-        fetchTransfers()
     }, [])
+
+    useEffect(() => {
+        fetchTransfers(page)
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [page, searchTerm])
 
     async function checkUserRole() {
         const { data: { user } } = await supabase.auth.getUser()
@@ -54,7 +65,7 @@ export default function Transfers() {
 
     // ... (existing state) ...
 
-    async function fetchTransfers() {
+    async function fetchTransfers(page = 1) {
         try {
             setLoading(true)
             setError(null)
@@ -63,17 +74,6 @@ export default function Transfers() {
 
             const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
             const isUserAdmin = profile?.role === 'Administrador'
-
-            let query = supabase
-                .from('transfers')
-                .select(`
-                    *,
-                    origin:origin_branch_id (name),
-                    destination:destination_branch_id (name),
-                    sender:profiles!fk_transfers_sender (full_name),
-                    receiver:profiles!fk_transfers_receiver (full_name)
-                `)
-                .order('created_at', { ascending: false })
 
             // Fetch branches regardless of admin status to control UI buttons
             const { data: assignments } = await supabase
@@ -84,10 +84,23 @@ export default function Transfers() {
             const assignedIds = assignments?.map(a => a.branch_id) || []
             setUserBranchIds(assignedIds)
 
+            let query = supabase
+                .from('transfers')
+                .select(`
+                    *,
+                    origin:origin_branch_id (name),
+                    destination:destination_branch_id (name),
+                    sender:profiles!fk_transfers_sender (full_name),
+                    receiver:profiles!fk_transfers_receiver (full_name)
+                `, { count: 'exact' })
+
+            let statsQuery = supabase.from('transfers').select('status')
+
             if (!isUserAdmin) {
                 if (assignedIds.length > 0) {
-                    // Filter where either origin or destination is in assigned branches
-                    query = query.or(`origin_branch_id.in.(${assignedIds.join(',')}),destination_branch_id.in.(${assignedIds.join(',')})`)
+                    const orFilter = `origin_branch_id.in.(${assignedIds.join(',')}),destination_branch_id.in.(${assignedIds.join(',')})`
+                    query = query.or(orFilter)
+                    statsQuery = statsQuery.or(orFilter)
                 } else {
                     setTransfers([])
                     setStats({ pending: 0, inTransit: 0, received: 0 })
@@ -96,11 +109,22 @@ export default function Transfers() {
                 }
             }
 
-            const { data, error } = await query
+            const term = searchTerm.trim()
+            if (term) {
+                query = query.or(`transfer_number::text.ilike.%${term}%,origin.name.ilike.%${term}%,destination.name.ilike.%${term}%`)
+            }
+
+            const from = (page - 1) * pageSize
+            const { data, error, count } = await query.order('created_at', { ascending: false }).range(from, from + pageSize - 1)
 
             if (error) throw error
+
+            const { data: statusData } = await statsQuery
+            calculateStats(statusData || [])
+
             setTransfers(data || [])
-            calculateStats(data || [])
+            setTotalTransfers(count || 0)
+            setPage(page)
         } catch (err) {
             console.error('Error fetching transfers:', err)
             setError('Error al cargar el historial de traspasos.')
@@ -281,12 +305,137 @@ export default function Transfers() {
         }
     }
 
-    const filteredTransfers = transfers.filter(t =>
-        t.transfer_number?.toString().includes(searchTerm) ||
-        t.id.toString().includes(searchTerm) ||
-        t.origin?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        t.destination?.name?.toLowerCase().includes(searchTerm.toLowerCase())
-    )
+    const filteredTransfers = transfers
+
+    const printTransfer = async (t) => {
+        try {
+            setLoading(true)
+            const { data: items, error } = await supabase
+                .from('transfer_items')
+                .select('*, products(name, sku)')
+                .eq('transfer_id', t.id)
+            if (error) throw error
+
+            const totalItems = (items || []).reduce((acc, i) => acc + (Number(i.quantity) || 0), 0)
+
+            const styles = `
+                @page { size: A4; margin: 2cm; }
+                body { font-family: 'Inter', sans-serif; color: #333; line-height: 1.5; font-size: 12px; }
+                .header { display: flex; justify-content: space-between; margin-bottom: 2rem; border-bottom: 2px solid #eee; padding-bottom: 1rem; }
+                .company-info h1 { margin: 0; color: #111; font-size: 24px; text-transform: uppercase; letter-spacing: -0.5px; }
+                .company-info p { margin: 2px 0; color: #666; }
+                .invoice-details { text-align: right; }
+                .invoice-details h2 { margin: 0; font-size: 18px; color: #111; }
+                .invoice-details p { margin: 2px 0; color: #666; }
+                .section-title { font-size: 10px; font-weight: 700; text-transform: uppercase; color: #999; margin-bottom: 0.5rem; letter-spacing: 1px; }
+                .route-box { background: #f9fafb; padding: 1.5rem; border-radius: 8px; margin-bottom: 2rem; }
+                .route { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+                .route .stop { flex: 1; }
+                .route .stop h3 { margin: 0 0 0.25rem 0; font-size: 15px; color: #111; }
+                .route .stop p { margin: 0; color: #666; }
+                .route .arrow { font-size: 24px; color: #aaa; text-align: center; }
+                .route-detail { margin-top: 1.25rem; padding-top: 1rem; border-top: 1px solid #eee; display: flex; justify-content: space-between; color: #555; flex-wrap: wrap; gap: 0.5rem; }
+                table { width: 100%; border-collapse: collapse; margin-bottom: 2rem; }
+                th { text-align: left; padding: 0.75rem 0; border-bottom: 1px solid #ddd; font-weight: 700; color: #555; font-size: 10px; text-transform: uppercase; }
+                td { padding: 0.75rem 0; border-bottom: 1px solid #eee; color: #111; }
+                .total-row { display: flex; justify-content: flex-end; padding-top: 1rem; }
+                .footer { margin-top: 4rem; padding-top: 2rem; border-top: 1px solid #eee; display: flex; justify-content: space-between; color: #888; font-size: 10px; }
+                .signature { width: 200px; text-align: center; margin-top: 1rem; padding-top: 1rem; border-top: 1px solid #ddd; }
+            `
+
+            const statusLabel = t.status ? (t.status.charAt(0).toUpperCase() + t.status.slice(1)) : 'Pendiente'
+
+            const html = `
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <meta charset="utf-8">
+                    <title>Guía de Traspaso #${t.transfer_number}</title>
+                    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;900&display=swap" rel="stylesheet">
+                    <style>${styles}</style>
+                </head>
+                <body>
+                    <div class="header">
+                        <div class="company-info">
+                            <h1>Casa Oris</h1>
+                            <p>Zona Villa Adela, Calle "J" #2</p>
+                            <p>Tel: 76282003 | info@casaoris.com</p>
+                        </div>
+                        <div class="invoice-details">
+                            <h2>GUÍA DE TRASPASO</h2>
+                            <p style="font-size: 14px; font-weight: 700; color: #111;">#${t.transfer_number || t.id.slice(0, 8)}</p>
+                            <p>Fecha: ${new Date(t.created_at).toLocaleDateString()}</p>
+                            <p>Estado: <span style="font-weight: 700;">${statusLabel}</span></p>
+                        </div>
+                    </div>
+
+                    <div class="route-box">
+                        <div class="section-title">Ruta de Traslado</div>
+                        <div class="route">
+                            <div class="stop">
+                                <p style="font-size: 10px; font-weight: 700; text-transform: uppercase; color: #999; margin-bottom: 0.25rem;">Origen</p>
+                                <h3>${t.origin?.name || '—'}</h3>
+                            </div>
+                            <div class="arrow">➜</div>
+                            <div class="stop" style="text-align: right;">
+                                <p style="font-size: 10px; font-weight: 700; text-transform: uppercase; color: #999; margin-bottom: 0.25rem;">Destino</p>
+                                <h3>${t.destination?.name || '—'}</h3>
+                            </div>
+                        </div>
+                        <div class="route-detail">
+                            <span><strong>Enviado por:</strong> ${t.sender?.full_name || 'Sistema'}</span>
+                            <span><strong>Recibido por:</strong> ${t.receiver?.full_name || 'Pendiente'}</span>
+                            <span><strong>Total de items:</strong> ${totalItems}</span>
+                        </div>
+                    </div>
+
+                    <table>
+                        <thead>
+                            <tr>
+                                <th style="width: 70%;">Descripción</th>
+                                <th class="text-right">Cantidad</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${(items || []).map(item => `
+                                <tr>
+                                    <td>
+                                        <div style="font-weight: 600;">${item.products?.name || 'Producto'}</div>
+                                        <div style="color: #666; font-size: 10px;">sku: ${item.products?.sku || ''}</div>
+                                    </td>
+                                    <td class="text-right" style="font-weight: 700;">${item.quantity}</td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+
+                    <div class="total-row">
+                        <div style="width: 200px;">
+                            <div class="section-title">Total Items</div>
+                            <div style="font-size: 16px; font-weight: 900; color: #111;">${totalItems} unidades</div>
+                        </div>
+                    </div>
+
+                    <div class="footer">
+                        <div class="signature">
+                            Firma Enviado
+                        </div>
+                        <div class="signature">
+                            Firma Recibido
+                        </div>
+                    </div>
+                </body>
+                </html>
+            `
+
+            printHTML(html)
+        } catch (err) {
+            console.error('Error printing transfer:', err)
+            showToast('Error al imprimir el traspaso', 'error')
+        } finally {
+            setLoading(false)
+        }
+    }
 
     return (
         <div style={{ padding: '0.5rem' }}>
@@ -340,7 +489,7 @@ export default function Transfers() {
                 <div style={{ display: 'flex', gap: '0.75rem' }}>
                     <button
                         className="btn shadow-sm"
-                        onClick={fetchTransfers}
+                        onClick={() => fetchTransfers(page)}
                         disabled={loading}
                         style={{ backgroundColor: 'hsl(var(--secondary) / 0.5)', borderRadius: '12px', padding: '0.75rem' }}
                     >
@@ -409,7 +558,7 @@ export default function Transfers() {
                             fontSize: '0.9rem'
                         }}
                         value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
+                        onChange={(e) => { setSearchTerm(e.target.value); setPage(1) }}
                     />
                 </div>
             </div>
@@ -479,6 +628,8 @@ export default function Transfers() {
                                             )}
 
                                             <button onClick={() => setViewingTransfer(t)} style={{ padding: '0.4rem', borderRadius: '8px', border: 'none', backgroundColor: 'white', color: 'hsl(var(--foreground))', cursor: 'pointer', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }} title="Ver Detalle"><Eye size={14} /></button>
+
+                                            <button onClick={() => printTransfer(t)} disabled={loading} style={{ padding: '0.4rem', borderRadius: '8px', border: 'none', backgroundColor: 'white', color: 'hsl(var(--primary))', cursor: 'pointer', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }} title="Imprimir"><Printer size={14} /></button>
 
                                             {(isAdmin || t.can_edit) ? (
                                                 <button onClick={() => handleEdit(t, false)} style={{ padding: '0.4rem', borderRadius: '8px', border: 'none', backgroundColor: 'hsl(var(--primary) / 0.05)', color: 'hsl(var(--primary))', cursor: 'pointer' }} title="Modificar"><Edit2 size={14} /></button>
@@ -615,6 +766,19 @@ export default function Transfers() {
                         )
                     })
                 )}
+            </div>
+
+            <div style={{ marginTop: '1.5rem' }}>
+                <div className="card" style={{ padding: 0, borderRadius: '14px' }}>
+                    <Pagination
+                        page={page}
+                        totalPages={Math.max(1, Math.ceil(totalTransfers / pageSize))}
+                        totalItems={totalTransfers}
+                        onPageChange={(p) => setPage(p)}
+                        disabled={loading}
+                        label="traspasos"
+                    />
+                </div>
             </div>
 
             <style>{`

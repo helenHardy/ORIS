@@ -1,30 +1,26 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react'
-import { Search, ShoppingCart, Wallet, Building2, Printer, CheckCircle, X, Tag, LayoutGrid, RefreshCw } from 'lucide-react'
-import { supabase } from '../lib/supabase'
-import ProductGrid from '../components/pos/ProductGrid'
-import Cart from '../components/pos/Cart'
-import CheckoutModal from '../components/pos/CheckoutModal'
-import Ticket from '../components/pos/Ticket'
-import { printHTML } from '../lib/print'
+import React, { useState, useEffect, useCallback } from 'react'
+import { Search, ShoppingCart, Building2, X, Tag, LayoutGrid, RefreshCw, User, Calendar, StickyNote, Calculator, Save, Loader2 } from 'lucide-react'
+import { supabase } from '../../lib/supabase'
+import ProductGrid from './ProductGrid'
+import Cart from './Cart'
 
-export default function POS() {
-    const [cart, setCart] = useState([])
+export default function QuotationPOS({ initialData, isSaving, onClose, onSave, currencySymbol = 'Bs.' }) {
+    const [cart, setCart] = useState(initialData?.items || [])
     const [searchTerm, setSearchTerm] = useState('')
     const [debouncedSearch, setDebouncedSearch] = useState('')
     const [branches, setBranches] = useState([])
-    const [selectedBranchId, setSelectedBranchId] = useState(null)
-    const [isCheckoutOpen, setIsCheckoutOpen] = useState(false)
-    const [isProcessing, setIsProcessing] = useState(false)
-    const [cashBoxes, setCashBoxes] = useState([])
-    const [lastSale, setLastSale] = useState(null)
-    const [showTicket, setShowTicket] = useState(false)
+    const [selectedBranchId, setSelectedBranchId] = useState(initialData?.branch_id || null)
+    const [customers, setCustomers] = useState([])
+    const [selectedCustomer, setSelectedCustomer] = useState(initialData?.customer_id || '')
+    const [validUntil, setValidUntil] = useState(initialData?.valid_until || new Date(Date.now() + 15 * 24 * 60 * 60 * 1000).toISOString().split('T')[0])
+    const [notes, setNotes] = useState(initialData?.notes || '')
+    const [discount, setDiscount] = useState(initialData?.discount || 0)
+    const [tax, setTax] = useState(initialData?.tax || 0)
     const [categories, setCategories] = useState(['Todos'])
     const [selectedCategory, setSelectedCategory] = useState('Todos')
-    const [taxSettings, setTaxSettings] = useState({ enable_tax: true, tax_rate: 13, tax_name: 'IVA' })
-    const [currencySymbol, setCurrencySymbol] = useState('Bs.')
-    const [gridRefreshKey, setGridRefreshKey] = useState(0)
     const [onlyMermas, setOnlyMermas] = useState(false)
-    const ticketRef = useRef()
+    const [gridRefreshKey, setGridRefreshKey] = useState(0)
+    const [error, setError] = useState(null)
 
     useEffect(() => {
         const timer = setTimeout(() => setDebouncedSearch(searchTerm), 180)
@@ -33,50 +29,9 @@ export default function POS() {
 
     useEffect(() => {
         fetchBranches()
+        fetchCustomers()
         fetchCategories()
-        fetchSettings()
     }, [])
-
-    useEffect(() => {
-        if (selectedBranchId) {
-            fetchCashBoxes(selectedBranchId)
-        }
-    }, [selectedBranchId])
-
-    async function fetchCashBoxes(branchId) {
-        const { data } = await supabase.from('cash_boxes').select('*').eq('branch_id', branchId).eq('active', true).order('name')
-        setCashBoxes(data || [])
-    }
-
-    async function fetchSettings() {
-        const { data } = await supabase.from('settings').select('*')
-        let taxConfig = { enable_tax: true, tax_rate: 13, tax_name: 'IVA' }
-        let symbol = 'Bs.'
-
-        if (data) {
-            const mapped = {}
-            data.forEach(item => {
-                if (item.value === 'true') mapped[item.key] = true
-                else if (item.value === 'false') mapped[item.key] = false
-                else mapped[item.key] = item.value
-            })
-            taxConfig = {
-                enable_tax: mapped.enable_tax !== undefined ? mapped.enable_tax : true,
-                tax_rate: mapped.tax_rate !== undefined ? parseFloat(mapped.tax_rate) : 13,
-                tax_name: mapped.tax_name || 'IVA'
-            }
-            if (mapped.currency === 'BOL') symbol = 'Bs.'
-            else if (mapped.currency === 'EUR') symbol = '€'
-            else if (mapped.currency === 'USD') symbol = '$'
-        }
-        setTaxSettings(taxConfig)
-        setCurrencySymbol(symbol)
-    }
-
-    async function fetchCategories() {
-        const { data } = await supabase.from('categories').select('name').order('name')
-        if (data) setCategories(['Todos', ...data.map(c => c.name)])
-    }
 
     async function fetchBranches() {
         const { data: { user } } = await supabase.auth.getUser()
@@ -93,15 +48,25 @@ export default function POS() {
         const { data } = await query
         if (data && data.length > 0) {
             setBranches(data)
-            setSelectedBranchId(data[0].id)
+            const defaultId = initialData?.branch_id || data[0].id
+            setSelectedBranchId(defaultId)
         }
+    }
+
+    async function fetchCustomers() {
+        const { data } = await supabase.from('customers').select('*').eq('active', true).order('name')
+        setCustomers(data || [])
+    }
+
+    async function fetchCategories() {
+        const { data } = await supabase.from('categories').select('name').order('name')
+        if (data) setCategories(['Todos', ...data.map(c => c.name)])
     }
 
     const getEffectivePrice = useCallback((product, quantity) => {
         const rules = product.tiered_rules || []
         if (rules.length === 0) return product.base_price || product.price
 
-        // Find applicable rule with highest min_quantity <= quantity
         const applicableRule = rules
             .filter(r => quantity >= r.min_quantity)
             .sort((a, b) => b.min_quantity - a.min_quantity)[0]
@@ -118,7 +83,6 @@ export default function POS() {
             return
         }
 
-        // Si el filtro "Solo MERMAS" está activado o no hay stock normal, vender como producto dañado
         const autoDamaged = onlyMermas || (ns <= 0 && ds > 0)
 
         if (autoDamaged && ds <= 0) {
@@ -155,7 +119,6 @@ export default function POS() {
                 const isNowDamaged = !item.is_damaged
                 const availableStock = isNowDamaged ? (item.damaged_stock || 0) : (item.stock || 0)
 
-                // Si la cantidad actual supera el nuevo stock disponible, avisar y bloquear
                 if (item.quantity > availableStock) {
                     alert(`No puedes marcar como ${isNowDamaged ? 'dañado' : 'normal'} porque solo hay ${availableStock} unidades disponibles.`)
                     return item
@@ -189,7 +152,6 @@ export default function POS() {
         setCart(prev => prev.map(item => {
             if (item.id === productId) {
                 const availableStock = item.is_damaged ? (item.damaged_stock || 0) : (item.stock || 0)
-                // Permitimos 0 temporalmente para que el usuario pueda borrar y escribir
                 const qty = Math.max(0, newQuantity)
 
                 if (qty > availableStock) {
@@ -208,110 +170,28 @@ export default function POS() {
         ))
     }, [])
 
-    const handleSkuEnter = useCallback(async () => {
-        const term = searchTerm.trim()
-        if (!term || !selectedBranchId) return
-
-        try {
-            const { data, error } = await supabase
-                .from('products')
-                .select(`
-                    *,
-                    category:categories(name),
-                    subcategory:subcategories(name),
-                    brand:brands(name),
-                    settings:product_branch_settings!inner(*),
-                    tiered_prices:product_tiered_prices(*)
-                `)
-                .eq('settings.branch_id', selectedBranchId)
-                .eq('active', true)
-                .ilike('sku', term)
-                .limit(1)
-
-            if (error) throw error
-
-            if (!data || data.length === 0) {
-                alert(`No se encontró ningún producto con el SKU "${term}" en esta sucursal.`)
-                return
-            }
-
-            const p = data[0]
-            addToCart({
-                ...p,
-                price: p.settings[0]?.price || p.price,
-                base_price: p.settings[0]?.price || p.price,
-                stock: p.settings[0]?.stock || 0,
-                damaged_stock: p.settings[0]?.damaged_stock || 0,
-                tiered_rules: p.tiered_prices || []
-            })
-            setSearchTerm('')
-        } catch (err) {
-            console.error('Error buscando por SKU:', err)
-            alert('Ocurrió un error al buscar el SKU.')
-        }
-    }, [searchTerm, selectedBranchId, addToCart])
-
-    const handleCheckout = useCallback(async (checkoutData) => {
-        try {
-            if (!selectedBranchId) return alert('Seleccione una sucursal')
-            setIsProcessing(true)
-            const subtotal = cart.reduce((acc, item) => acc + (item.price * item.quantity), 0)
-            const tax = taxSettings.enable_tax ? (subtotal * (taxSettings.tax_rate / 100)) : 0
-            const discount = checkoutData?.discount || 0
-            const total = Math.max(0, subtotal + tax - discount)
-
-            const { data: { user } } = await supabase.auth.getUser()
-            const { data: sale, error: saleError } = await supabase
-                .from('sales')
-                .insert([{
-                    subtotal, tax, total,
-                    discount: discount,
-                    payment_method: checkoutData?.paymentMethod,
-                    amount_received: checkoutData?.isCredit ? 0 : (checkoutData?.amountPaid || total),
-                    amount_change: checkoutData?.isCredit ? 0 : (checkoutData?.change || 0),
-                    branch_id: selectedBranchId,
-                    customer_id: checkoutData?.customerId || null,
-                    is_credit: checkoutData?.isCredit || false,
-                    user_id: user?.id,
-                    cash_box_id: checkoutData?.cashBoxId || null
-                }])
-                .select().single()
-            if (saleError) throw saleError
-            const { error: itemsError } = await supabase
-                .from('sale_items')
-                .insert(cart.map(item => ({
-                    sale_id: sale.id,
-                    product_id: item.id,
-                    quantity: item.quantity,
-                    price: item.price,
-                    total: item.price * item.quantity,
-                    is_damaged: !!item.is_damaged
-                })))
-            if (itemsError) throw itemsError
-
-            // ELIMINADO: La actualización manual del saldo del cliente.
-            // Ahora se encarga el trigger trg_sales_credit en la base de datos de forma automática y segura.
-
-            setLastSale({ sale, items: [...cart], branch: branches.find(b => b.id === selectedBranchId), customer: checkoutData?.customer || null, paymentMethod: checkoutData?.paymentMethod, currencySymbol })
-            setShowTicket(true)
-            setCart([])
-            setIsCheckoutOpen(false)
-            setGridRefreshKey(prev => prev + 1)
-        } catch (err) {
-            console.error(err)
-            alert('Error al registrar venta: ' + err.message)
-        } finally {
-            setIsProcessing(false)
-        }
-    }, [cart, selectedBranchId, taxSettings, branches, currencySymbol])
-
-    const handlePrint = () => {
-        const printArea = ticketRef.current?.innerHTML || ''
-        printHTML(`<html><head><title>Ticket</title><style>body{margin:0;padding:0;}</style></head><body>${printArea}</body></html>`)
-    }
-
     const subtotal = cart.reduce((acc, item) => acc + (item.price * item.quantity), 0)
-    const total = taxSettings.enable_tax ? (subtotal * (1 + (taxSettings.tax_rate / 100))) : subtotal
+    const total = Math.max(0, subtotal + parseFloat(tax || 0) - parseFloat(discount || 0))
+
+    const handleSubmit = () => {
+        setError(null)
+        if (!selectedBranchId) return setError('Seleccione una sucursal')
+        if (cart.length === 0) return setError('Agregue al menos un producto')
+        onSave({
+            customer_id: selectedCustomer || null,
+            branch_id: selectedBranchId,
+            valid_until: validUntil,
+            notes,
+            discount: parseFloat(discount || 0),
+            tax: parseFloat(tax || 0)
+        }, cart.map(item => ({
+            product_id: item.id,
+            quantity: item.quantity,
+            price: item.price,
+            total: item.price * item.quantity,
+            is_damaged: !!item.is_damaged
+        })))
+    }
 
     return (
         <div className="no-scrollbar pos-layout" style={{
@@ -320,46 +200,27 @@ export default function POS() {
             padding: '0.75rem',
             alignItems: 'start'
         }}>
-            {isCheckoutOpen && (
-                <CheckoutModal
-                    total={total}
-                    isProcessing={isProcessing}
-                    currencySymbol={currencySymbol}
-                    onClose={() => setIsCheckoutOpen(false)}
-                    onConfirm={handleCheckout}
-                    cashBoxes={cashBoxes}
-                />
-            )}
-
-            {showTicket && lastSale && (
-                <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 200, padding: '2rem', overflowY: 'auto' }}>
-                        <div className="ticket-modal-inner" style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', alignItems: 'center', maxWidth: '480px', width: '100%' }}>
-                            <div style={{ textAlign: 'center' }}>
-                                <div style={{ width: '64px', height: '64px', borderRadius: '50%', backgroundColor: 'hsl(142 76% 36% / 0.1)', color: 'hsl(142 76% 36%)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1rem' }}><CheckCircle size={40} /></div>
-                                <h2 style={{ fontSize: '1.5rem', fontWeight: '800' }}>¡Venta Exitosa!</h2>
-                                <p style={{ opacity: 0.6 }}>Comprobante generado correctamente.</p>
-                            </div>
-                            <div className="card shadow-2xl" style={{ backgroundColor: 'white', padding: 0, borderRadius: '20px', overflow: 'auto', width: '100%', maxHeight: '55vh' }}>
-                                <Ticket ref={ticketRef} {...lastSale} />
-                            </div>
-                            <div style={{ display: 'flex', gap: '1rem', width: '100%', flexShrink: 0 }}>
-                                <button className="btn ticket-modal-btn" style={{ flex: 1, borderRadius: '14px', backgroundColor: 'white' }} onClick={() => setShowTicket(false)}><X size={20} /> Cerrar</button>
-                                <button className="btn btn-primary ticket-modal-btn" style={{ flex: 1, borderRadius: '14px' }} onClick={handlePrint}><Printer size={20} /> Imprimir</button>
-                            </div>
-                        </div>
-                        <style>{`
-                            .ticket-modal-inner { max-width: 480px; }
-                            .ticket-modal-btn { display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem; }
-                            @media (max-width: 420px) {
-                                .ticket-modal-inner { max-width: 100%; }
-                                .ticket-modal-inner > div:last-child { flex-direction: column !important; }
-                            }
-                        `}</style>
-                    </div>
-            )}
-
             {/* Catalog Section */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                {/* Header */}
+                <div className="card shadow-sm" style={{ padding: '1rem 1.25rem', borderRadius: '18px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', border: '1px solid hsl(var(--border) / 0.6)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                        <div style={{ padding: '0.75rem', backgroundColor: 'hsl(var(--primary) / 0.1)', color: 'hsl(var(--primary))', borderRadius: '15px' }}>
+                            <ShoppingCart size={24} />
+                        </div>
+                        <div>
+                            <h1 style={{ fontSize: '1.4rem', fontWeight: '900', margin: 0, letterSpacing: '-0.03em' }}>
+                                {initialData ? `Editar Cotización #${initialData.quotation_number || ''}` : 'Nueva Cotización'}
+                            </h1>
+                            <p style={{ fontSize: '0.8rem', fontWeight: '500', opacity: 0.5, margin: 0 }}>Selecciona productos del catálogo para armar la cotización</p>
+                        </div>
+                    </div>
+                    <button onClick={onClose} className="btn" style={{ padding: '0.5rem', borderRadius: '50%', backgroundColor: 'hsl(var(--secondary) / 0.5)' }} disabled={isSaving}>
+                        <X size={22} />
+                    </button>
+                </div>
+
+                {/* Search / Filters */}
                 <div className="card shadow-sm" style={{ padding: '1rem', borderRadius: '18px', display: 'flex', flexDirection: 'column', gap: '0.85rem', border: '1px solid hsl(var(--border) / 0.6)' }}>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem', alignItems: 'center' }}>
                         <div style={{ position: 'relative', flex: 1, minWidth: '200px' }}>
@@ -370,19 +231,18 @@ export default function POS() {
                                 style={{ width: '100%', padding: '0.65rem 0.85rem 0.65rem 2.4rem', backgroundColor: 'hsl(var(--secondary) / 0.4)', borderRadius: '12px', border: 'none', fontSize: '0.9rem', outline: 'none' }}
                                 value={searchTerm}
                                 onChange={(e) => setSearchTerm(e.target.value)}
-                                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleSkuEnter() } }}
                             />
                         </div>
 
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.4rem 0.85rem', backgroundColor: 'hsl(var(--secondary) / 0.4)', borderRadius: '12px' }}>
                             <input
                                 type="checkbox"
-                                id="posOnlyMermas"
+                                id="quotationPOSOnlyMermas"
                                 checked={onlyMermas}
                                 onChange={(e) => setOnlyMermas(e.target.checked)}
                                 style={{ cursor: 'pointer', width: '15px', height: '15px' }}
                             />
-                            <label htmlFor="posOnlyMermas" style={{ fontSize: '0.75rem', fontWeight: '700', cursor: 'pointer', color: onlyMermas ? 'hsl(var(--destructive))' : 'inherit' }}>Solo MERMAS</label>
+                            <label htmlFor="quotationPOSOnlyMermas" style={{ fontSize: '0.75rem', fontWeight: '700', cursor: 'pointer', color: onlyMermas ? 'hsl(var(--destructive))' : 'inherit' }}>Solo MERMAS</label>
                         </div>
 
                         <div style={{ display: 'flex', alignItems: 'center', padding: '0.4rem 0.85rem', backgroundColor: 'hsl(var(--secondary) / 0.4)', borderRadius: '12px', gap: '0.6rem' }}>
@@ -455,23 +315,62 @@ export default function POS() {
                 flexDirection: 'column',
                 padding: 0,
                 borderRadius: '24px',
-                overflow: 'hidden',
+                overflow: 'visible',
                 border: '1px solid hsl(var(--border) / 0.6)',
                 backgroundColor: 'hsl(var(--background))',
                 position: 'sticky',
                 top: '1rem',
-                alignSelf: 'start',
-                maxHeight: 'calc(100vh - 64px - 3.5rem)'
+                alignSelf: 'start'
             }}>
                 <div style={{ padding: '1rem', borderBottom: '1px solid hsl(var(--border) / 0.4)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'hsl(var(--secondary) / 0.1)' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                         <div style={{ padding: '0.5rem', backgroundColor: 'hsl(var(--primary) / 0.1)', color: 'hsl(var(--primary))', borderRadius: '12px' }}><ShoppingCart size={20} /></div>
-                        <h2 style={{ fontSize: '1.15rem', fontWeight: '800' }}>Orden Actual</h2>
+                        <h2 style={{ fontSize: '1.15rem', fontWeight: '800' }}>Cotización</h2>
                     </div>
                     <span style={{ fontSize: '0.75rem', fontWeight: '800', backgroundColor: 'hsl(var(--primary))', color: 'white', padding: '4px 10px', borderRadius: '99px' }}>{cart.length} ITEMS</span>
                 </div>
 
-                <div className="no-scrollbar" style={{ flex: 1, overflowY: 'scroll', paddingRight: '0.25rem' }}>
+                <div style={{ padding: '0.85rem 1rem', borderBottom: '1px solid hsl(var(--border) / 0.3)', display: 'flex', flexDirection: 'column', gap: '0.6rem', backgroundColor: 'hsl(var(--secondary) / 0.05)' }}>
+                    <div>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.68rem', fontWeight: '800', textTransform: 'uppercase', opacity: 0.5, marginBottom: '0.3rem' }}>
+                            <User size={12} /> Cliente
+                        </label>
+                        <select
+                            style={{ width: '100%', padding: '0.6rem 0.75rem', backgroundColor: 'white', borderRadius: '10px', border: '1px solid hsl(var(--border) / 0.6)', fontWeight: '700', fontSize: '0.85rem', outline: 'none' }}
+                            value={selectedCustomer}
+                            onChange={(e) => setSelectedCustomer(e.target.value)}
+                        >
+                            <option value="">Cliente General</option>
+                            {customers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                        </select>
+                    </div>
+
+                    <div>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.68rem', fontWeight: '800', textTransform: 'uppercase', opacity: 0.5, marginBottom: '0.3rem' }}>
+                            <Calendar size={12} /> Válido Hasta
+                        </label>
+                        <input
+                            type="date"
+                            value={validUntil}
+                            onChange={(e) => setValidUntil(e.target.value)}
+                            style={{ width: '100%', padding: '0.6rem 0.75rem', backgroundColor: 'white', borderRadius: '10px', border: '1px solid hsl(var(--border) / 0.6)', fontWeight: '700', fontSize: '0.85rem', outline: 'none' }}
+                        />
+                    </div>
+
+                    <div>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.68rem', fontWeight: '800', textTransform: 'uppercase', opacity: 0.5, marginBottom: '0.3rem' }}>
+                            <StickyNote size={12} /> Notas
+                        </label>
+                        <textarea
+                            placeholder="Ej: Condiciones especiales..."
+                            value={notes}
+                            onChange={(e) => setNotes(e.target.value)}
+                            style={{ width: '100%', padding: '0.6rem 0.75rem', backgroundColor: 'white', borderRadius: '10px', border: '1px solid hsl(var(--border) / 0.6)', fontWeight: '600', fontSize: '0.85rem', outline: 'none', resize: 'none', height: '50px' }}
+                        />
+                    </div>
+                </div>
+
+                <div className="no-scrollbar" style={{ paddingRight: '0.25rem' }}>
                     <Cart
                         items={cart}
                         onRemove={removeFromCart}
@@ -485,33 +384,55 @@ export default function POS() {
 
                 <div style={{ padding: '1.25rem', backgroundColor: 'hsl(var(--secondary) / 0.15)', borderTop: '1px solid hsl(var(--border) / 0.4)' }}>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '1rem' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', opacity: 0.6, fontWeight: '600' }}>
-                            <span>Subtotal</span>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.9rem', opacity: 0.6, fontWeight: '600' }}>
+                            <span className="calc-icon-label" style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                                <Calculator size={13} /> Subtotal
+                            </span>
                             <span>{currencySymbol}{subtotal.toFixed(2)}</span>
                         </div>
-                        {taxSettings.enable_tax && (
-                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', opacity: 0.6, fontWeight: '600' }}>
-                                <span>{taxSettings.tax_name} ({taxSettings.tax_rate}%)</span>
-                                <span>{currencySymbol}{(subtotal * (taxSettings.tax_rate / 100)).toFixed(2)}</span>
-                            </div>
-                        )}
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.9rem', opacity: 0.6, fontWeight: '600' }}>
+                            <span>Impuestos (+)</span>
+                            <input
+                                type="number"
+                                step="0.01"
+                                value={tax}
+                                onChange={(e) => setTax(e.target.value)}
+                                style={{ width: '90px', padding: '0.3rem 0.5rem', textAlign: 'right', backgroundColor: 'white', borderRadius: '8px', border: '1px solid hsl(var(--border) / 0.5)', fontWeight: '700', fontSize: '0.85rem', outline: 'none' }}
+                            />
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.9rem', color: 'hsl(var(--destructive))', opacity: 0.8, fontWeight: '600' }}>
+                            <span>Descuento (-)</span>
+                            <input
+                                type="number"
+                                step="0.01"
+                                value={discount}
+                                onChange={(e) => setDiscount(e.target.value)}
+                                style={{ width: '90px', padding: '0.3rem 0.5rem', textAlign: 'right', backgroundColor: 'white', borderRadius: '8px', border: '1px solid hsl(var(--border) / 0.5)', fontWeight: '700', fontSize: '0.85rem', outline: 'none' }}
+                            />
+                        </div>
                         <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '0.25rem' }}>
-                            <span style={{ fontSize: '1.05rem', fontWeight: '700' }}>Total a Pagar</span>
+                            <span style={{ fontSize: '1.05rem', fontWeight: '700' }}>Total Cotización</span>
                             <span style={{ fontSize: '1.5rem', fontWeight: '900', color: 'hsl(var(--primary))', letterSpacing: '-0.02em' }}>{currencySymbol}{total.toFixed(2)}</span>
                         </div>
                     </div>
 
+                    {error && (
+                        <div style={{ backgroundColor: 'hsl(var(--destructive) / 0.1)', color: 'hsl(var(--destructive))', padding: '0.6rem 0.85rem', borderRadius: '10px', fontSize: '0.8rem', fontWeight: '700', marginBottom: '0.75rem' }}>
+                            {error}
+                        </div>
+                    )}
+
                     <button
                         className="btn btn-primary shadow-xl shadow-primary/20"
                         style={{ width: '100%', padding: '1rem', borderRadius: '16px', fontSize: '1.05rem', fontWeight: '800', gap: '0.6rem' }}
-                        onClick={() => setIsCheckoutOpen(true)}
-                        disabled={cart.length === 0 || isProcessing}
+                        onClick={handleSubmit}
+                        disabled={cart.length === 0 || isSaving}
                     >
-                        {isProcessing ? <><RefreshCw className="animate-spin" /> PROCESANDO...</> : <><Wallet /> COBRAR ORDEN</>}
+                        {isSaving ? <><Loader2 className="animate-spin" /> GUARDANDO...</> : <><Save /> GUARDAR COTIZACIÓN</>}
                     </button>
 
                     <p style={{ textAlign: 'center', marginTop: '0.75rem', fontSize: '0.7rem', opacity: 0.4, fontWeight: '600' }}>
-                        SISTEMA DE FACTURACIÓN POS v2.0
+                        SISTEMA DE COTIZACIONES v2.0
                     </p>
                 </div>
             </div>

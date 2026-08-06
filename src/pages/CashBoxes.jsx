@@ -31,6 +31,10 @@ export default function CashBoxes() {
     const [selectedBoxForHistory, setSelectedBoxForHistory] = useState(null)
     const [movements, setMovements] = useState([])
     const [loadingHistory, setLoadingHistory] = useState(false)
+    const [payments, setPayments] = useState({})
+    const [historyPage, setHistoryPage] = useState(1)
+    const [totalMovements, setTotalMovements] = useState(0)
+    const historyPageSize = 10
 
     // Form state
     const [boxForm, setBoxForm] = useState({ name: '', branch_id: '', initial_balance: 0 })
@@ -93,35 +97,83 @@ export default function CashBoxes() {
                 query = query.eq('branch_id', selectedBranchId)
             }
 
-            const { data, error } = await query
+const { data, error } = await query
             if (error) throw error
             setCashBoxes(data || [])
+            await loadPaymentsBreakdown()
         } catch (err) {
-            console.error('Error fetching boxes:', err)
+            console.error('Error loading boxes:', err)
             showToast('Error al cargar cajas', 'error')
         } finally {
             setLoading(false)
         }
     }
 
-    async function fetchHistory(box) {
+    const parseNum = (s) => {
+        const n = parseFloat(String(s || '0').replace(/[^0-9.]/g, ''))
+        return isNaN(n) ? 0 : n
+    }
+
+    const splitAmount = (method, total) => {
+        const m = method.match(/Mixto \(Efectivo:\s*([0-9.,]+)[^)]*?(?:QR:\s*([0-9.,]+))?\)/)
+        if (method.toLowerCase().startsWith('mixto') && m) {
+            return { efectivo: parseNum(m[1]), qr: parseNum(m[2]) }
+        }
+        const lower = method.toLowerCase()
+        if (lower.includes('qr')) return { efectivo: 0, qr: total }
+        if (lower.includes('efectivo')) return { efectivo: total, qr: 0 }
+        return { efectivo: 0, qr: 0, otros: total }
+    }
+
+    async function loadPaymentsBreakdown() {
+        try {
+            const [salesRes, payRes] = await Promise.all([
+                supabase.from('sales').select('cash_box_id, payment_method, total').eq('is_credit', false),
+                supabase.from('customer_payments').select('cash_box_id, payment_method, amount')
+            ])
+            if (salesRes.error) throw salesRes.error
+            if (payRes.error) throw payRes.error
+
+            const map = {}
+            const add = (boxId, method, amount) => {
+                if (!boxId) return
+                if (!map[boxId]) map[boxId] = { efectivo: 0, qr: 0, otros: 0 }
+                const split = splitAmount(method, amount)
+                map[boxId].efectivo += (split.efectivo || 0)
+                map[boxId].qr += (split.qr || 0)
+                map[boxId].otros += (split.otros || 0)
+            }
+
+            ;(salesRes.data || []).forEach(s => add(s.cash_box_id, s.payment_method, s.total))
+            ;(payRes.data || []).forEach(p => add(p.cash_box_id, p.payment_method, p.amount))
+
+setPayments(map)
+        } catch (err) {
+            console.error('Error loading payments breakdown:', err)
+        }
+    }
+
+async function fetchHistory(box, page = 1) {
         try {
             setLoadingHistory(true)
             setSelectedBoxForHistory(box)
             setIsHistoryOpen(true)
+            setHistoryPage(page)
 
-            const { data, error } = await supabase
+            const from = (page - 1) * historyPageSize
+            const { data, error, count } = await supabase
                 .from('cash_movements')
                 .select(`
                     *,
                     user:profiles(full_name)
-                `)
+                `, { count: 'exact' })
                 .eq('cash_box_id', box.id)
                 .order('created_at', { ascending: false })
-                .limit(50)
+                .range(from, from + historyPageSize - 1)
 
             if (error) throw error
             setMovements(data || [])
+            setTotalMovements(count || 0)
         } catch (err) {
             console.error('Error fetching history:', err)
             showToast('Error al cargar historial', 'error')
@@ -245,6 +297,23 @@ export default function CashBoxes() {
                             </p>
                         </div>
 
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                            <div style={{ padding: '0.75rem', borderRadius: '12px', backgroundColor: 'hsl(142 76% 36% / 0.08)', border: '1px solid hsl(142 76% 36% / 0.15)' }}>
+                                <p style={{ fontSize: '0.7rem', opacity: 0.7, margin: 0, textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: '700' }}>Efectivo Recibido</p>
+                                <p style={{ fontSize: '1.15rem', fontWeight: '900', margin: '0.15rem 0 0', color: 'hsl(142 76% 36%)' }}>
+                                    <span style={{ fontSize: '0.75rem', opacity: 0.6, marginRight: '3px' }}>Bs.</span>
+                                    {(payments[box.id]?.efectivo || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                </p>
+                            </div>
+                            <div style={{ padding: '0.75rem', borderRadius: '12px', backgroundColor: 'hsl(267 84% 60% / 0.08)', border: '1px solid hsl(267 84% 60% / 0.15)' }}>
+                                <p style={{ fontSize: '0.7rem', opacity: 0.7, margin: 0, textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: '700' }}>QR Recibido</p>
+                                <p style={{ fontSize: '1.15rem', fontWeight: '900', margin: '0.15rem 0 0', color: 'hsl(267 84% 60%)' }}>
+                                    <span style={{ fontSize: '0.75rem', opacity: 0.6, marginRight: '3px' }}>Bs.</span>
+                                    {(payments[box.id]?.qr || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                </p>
+                            </div>
+                        </div>
+
                         <div style={{ display: 'flex', gap: '1rem' }}>
                             <button className="btn" style={{ flex: 1, gap: '0.5rem' }} onClick={() => fetchHistory(box)}>
                                 <History size={18} />
@@ -262,7 +331,7 @@ export default function CashBoxes() {
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
                             <div>
                                 <h2 style={{ fontSize: '1.5rem', fontWeight: 'bold' }}>Historial: {selectedBoxForHistory?.name}</h2>
-                                <p style={{ opacity: 0.6 }}>Últimos 50 movimientos</p>
+                                <p style={{ opacity: 0.6 }}>{totalMovements} movimientos</p>
                             </div>
                             <button className="btn" onClick={() => setIsHistoryOpen(false)} style={{ borderRadius: '50%', padding: '0.5rem' }}><X size={24} /></button>
                         </div>
@@ -273,8 +342,11 @@ export default function CashBoxes() {
                             ) : movements.length === 0 ? (
                                 <p style={{ textAlign: 'center', opacity: 0.5, padding: '3rem' }}>No hay movimientos registrados.</p>
                             ) : (
-                                movements.map(mov => (
-                                    <div key={mov.id} style={{ padding: '1rem', border: '1px solid hsl(var(--border) / 0.5)', borderRadius: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                movements.map(mov => {
+                                    const split = splitAmount(mov.method, mov.amount)
+                                    const showBreakdown = split.efectivo > 0 && split.qr > 0
+                                    return (
+                                    <div key={mov.id} style={{ padding: '1rem', border: '1px solid hsl(var(--border) / 0.5)', borderRadius: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem' }}>
                                         <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
                                             <div style={{
                                                 padding: '0.5rem',
@@ -287,19 +359,45 @@ export default function CashBoxes() {
                                             <div>
                                                 <p style={{ fontWeight: 'bold', margin: 0, fontSize: '0.9rem' }}>{mov.description}</p>
                                                 <p style={{ fontSize: '0.7rem', opacity: 0.5, margin: 0 }}>{new Date(mov.created_at).toLocaleString()}</p>
+                                                {mov.method && <p style={{ fontSize: '0.7rem', opacity: 0.7, margin: 0, color: 'hsl(var(--primary))' }}>Vía: {mov.method}</p>}
+                                                {showBreakdown && (
+                                                    <p style={{ fontSize: '0.7rem', opacity: 0.7, margin: 0 }}>
+                                                        Desglose: Efectivo {split.efectivo.toFixed(2)} + QR {split.qr.toFixed(2)}
+                                                    </p>
+                                                )}
                                                 <p style={{ fontSize: '0.7rem', opacity: 0.8, margin: 0 }}>Por: {mov.user?.full_name || 'Desconocido'}</p>
                                             </div>
                                         </div>
-                                        <p style={{
-                                            fontWeight: '900',
-                                            color: mov.type === 'INGRESO' ? 'hsl(142 76% 36%)' : 'hsl(0 84% 60%)'
-                                        }}>
-                                            {mov.type === 'INGRESO' ? '+' : '-'}{mov.amount.toFixed(2)}
-                                        </p>
+                                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.15rem' }}>
+                                            <p style={{
+                                                fontWeight: '900',
+                                                margin: 0,
+                                                color: mov.type === 'INGRESO' ? 'hsl(142 76% 36%)' : 'hsl(0 84% 60%)'
+                                            }}>
+                                                {mov.type === 'INGRESO' ? '+' : '-'}{mov.amount.toFixed(2)}
+                                            </p>
+                                            {showBreakdown && (
+                                                <p style={{ fontSize: '0.62rem', opacity: 0.6, margin: 0 }}>
+                                                    Efg {split.efectivo.toFixed(2)} / QR {split.qr.toFixed(2)}
+                                                </p>
+                                            )}
+                                        </div>
                                     </div>
-                                ))
+                                    )
+                                })
                             )}
                         </div>
+
+                        {totalMovements > historyPageSize && (() => {
+                            const totalPages = Math.max(1, Math.ceil(totalMovements / historyPageSize))
+                            return (
+                                <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center', alignItems: 'center', paddingTop: '1.25rem', borderTop: '1px solid hsl(var(--border) / 0.5)' }}>
+                                    <button className="btn btn-secondary" style={{ padding: '0.5rem 1rem' }} disabled={historyPage <= 1} onClick={() => fetchHistory(selectedBoxForHistory, historyPage - 1)}>‹ Anterior</button>
+                                    <span style={{ opacity: 0.7, fontSize: '0.85rem' }}>Página {historyPage} de {totalPages}</span>
+                                    <button className="btn btn-secondary" style={{ padding: '0.5rem 1rem' }} disabled={historyPage >= totalPages} onClick={() => fetchHistory(selectedBoxForHistory, historyPage + 1)}>Siguiente ›</button>
+                                </div>
+                            )
+                        })()}
                     </div>
                 </div>
             )}

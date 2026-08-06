@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { memo } from 'react'
 import { Plus, Minus, Trash2, Package, ShoppingCart, Box } from 'lucide-react'
 
 const getFirstImageUrl = (url) => {
@@ -7,14 +7,14 @@ const getFirstImageUrl = (url) => {
         try {
             const parsed = JSON.parse(url);
             return Array.isArray(parsed) ? parsed[0] || '' : url;
-        } catch (e) {
+        } catch {
             return url;
         }
     }
     return url;
 };
 
-export default function Cart({ items, onRemove, onUpdateQuantity, onSetQuantity, onSetPrice, onToggleDamaged, currencySymbol = 'Bs.' }) {
+export default memo(function Cart({ items, onRemove, onUpdateQuantity, onSetQuantity, onSetPrice, onToggleDamaged, currencySymbol = 'Bs.' }) {
     if (items.length === 0) {
         return (
             <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: 'hsl(var(--secondary-foreground))', padding: '2rem', opacity: 0.3 }}>
@@ -28,17 +28,17 @@ export default function Cart({ items, onRemove, onUpdateQuantity, onSetQuantity,
     }
 
     return (
-        <div style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+        <div style={{ padding: '0.85rem', display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
             {items.map(item => (
                 <div
                     key={item.id}
                     style={{
                         display: 'flex',
-                        gap: '1rem',
+                        gap: '0.75rem',
                         alignItems: 'center',
-                        padding: '1.25rem 1rem',
+                        padding: '0.85rem 0.75rem',
                         backgroundColor: item.is_damaged ? 'hsl(var(--destructive) / 0.05)' : 'hsl(var(--background))',
-                        borderRadius: '16px',
+                        borderRadius: '14px',
                         border: item.is_damaged ? '1px solid hsl(var(--destructive) / 0.3)' : '1px solid hsl(var(--border) / 0.5)',
                         boxShadow: '0 2px 4px rgba(0,0,0,0.02)',
                         transition: 'all 0.2s ease',
@@ -59,7 +59,7 @@ export default function Cart({ items, onRemove, onUpdateQuantity, onSetQuantity,
                         overflow: 'hidden'
                     }}>
                         {item.image_url ? (
-                            <img src={getFirstImageUrl(item.image_url)} alt={item.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                            <img src={getFirstImageUrl(item.image_url)} alt={item.name} loading="lazy" decoding="async" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                         ) : (
                             <Box size={20} opacity={0.4} />
                         )}
@@ -211,4 +211,4 @@ export default function Cart({ items, onRemove, onUpdateQuantity, onSetQuantity,
             `}</style>
         </div>
     )
-}
+})

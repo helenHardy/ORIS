@@ -1,7 +1,13 @@
--- RPC: Get Sales Report (Daily Aggregation)
--- Returns date, revenue, profit, and transaction count.
--- Days are interpreted in America/La_Paz local time.
--- Cost basis: products.cost_price if set (> 0), else weighted-average purchase cost.
+-- Fix Reports RPCs
+-- 1) Días de negocio en horario local (America/La_Paz) en lugar de UTC.
+-- 2) Costo real derivado de compras (promedio ponderado de purchase_items.unit_cost),
+--    con preferencia a products.cost_price manual si está cargado (> 0).
+
+-- Cost basis shared by the three functions:
+--   coalesce(nullif(products.cost_price, 0),
+--            weighted-avg(purchase_items.unit_cost),
+--            0)
+
 create or replace function get_sales_report(p_start_date date, p_end_date date, p_branch_id bigint default null)
 returns table (report_date text, total_sales numeric, total_profit numeric, transaction_count bigint)
 language plpgsql
@@ -60,8 +66,8 @@ begin
 end;
 $$;
 
--- RPC: Get Top Products
--- Returns product name, quantity sold, revenue, cost and profit.
+drop function if exists get_top_products(date, date, bigint, integer);
+
 create or replace function get_top_products(p_start_date date, p_end_date date, p_branch_id bigint default null, p_limit integer default 10)
 returns table (product_name text, quantity_sold numeric, total_revenue numeric, total_cost numeric, total_profit numeric, image_url text)
 language plpgsql
@@ -102,8 +108,6 @@ begin
 end;
 $$;
 
--- RPC: Get Inventory Valuation
--- Returns total cost value, total retail value, damaged value and item count.
 create or replace function get_inventory_valuation(p_branch_id bigint default null)
 returns table (total_cost_value numeric, total_retail_value numeric, total_damaged_value numeric, item_count bigint)
 language plpgsql

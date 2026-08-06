@@ -1,8 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react'
-import { Plus, Search, ClipboardList, RefreshCw, AlertTriangle, Building2, Calendar, User, Eye, Edit2, Trash2, ShoppingCart, TrendingUp, DollarSign, Target, Filter, ChevronRight, X, Printer, Download } from 'lucide-react'
+import { Search, ClipboardList, RefreshCw, AlertTriangle, Building2, Calendar, User, Eye, Trash2, ShoppingCart, TrendingUp, DollarSign, Target, Filter, ChevronRight, X, Printer, Download } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import SaleModal from '../components/pos/SaleModal'
 import Ticket from '../components/pos/Ticket'
+import { printHTML } from '../lib/print'
+import Pagination from '../components/common/Pagination'
 
 
 export default function Sales() {
@@ -27,6 +29,12 @@ export default function Sales() {
     const [filterEndDate, setFilterEndDate] = useState(new Date().toLocaleDateString('sv-SE'))
     const ticketRef = useRef()
 
+    // Pagination & metrics state
+    const [page, setPage] = useState(1)
+    const [totalSales, setTotalSales] = useState(0)
+    const pageSize = 15
+    const [metrics, setMetrics] = useState({ totalFiltrado: 0, ventasHoy: 0, ticketPromedio: 0, transacciones: 0 })
+
     const getLocalDate = (date) => {
         if (!date) return ''
         const d = new Date(date)
@@ -37,7 +45,6 @@ export default function Sales() {
 
     useEffect(() => {
         checkUserRole()
-        fetchSales()
         fetchSettings()
         fetchBranches()
 
@@ -45,6 +52,48 @@ export default function Sales() {
         window.addEventListener('print-ticket', handleTicketEvent)
         return () => window.removeEventListener('print-ticket', handleTicketEvent)
     }, [])
+
+    const getTimeBounds = (modeOverride, day = filterDay, month = filterMonth, year = filterYear, start = filterStartDate, end = filterEndDate) => {
+        const mode = modeOverride || filterMode
+        let s, e
+        if (mode === 'day') {
+            if (!day) return null
+            s = new Date(`${day}T00:00:00`)
+            e = new Date(`${day}T00:00:00`); e.setDate(e.getDate() + 1)
+        } else if (mode === 'month') {
+            s = new Date(`${year}-${String(month).padStart(2, '0')}-01T00:00:00`)
+            e = new Date(s); e.setMonth(e.getMonth() + 1)
+        } else if (mode === 'year') {
+            s = new Date(`${year}-01-01T00:00:00`)
+            e = new Date(`${Number(year) + 1}-01-01T00:00:00`)
+        } else if (mode === 'range') {
+            if (!start || !end) return null
+            s = new Date(`${start}T00:00:00`)
+            e = new Date(`${end}T00:00:00`); e.setDate(e.getDate() + 1)
+        }
+        if (!s || isNaN(s.getTime()) || isNaN(e.getTime())) return null
+        return { start: s.toISOString(), end: e.toISOString() }
+    }
+
+    const localDayBounds = (localDateStr) => {
+        const s = new Date(`${localDateStr}T00:00:00`)
+        const e = new Date(`${localDateStr}T00:00:00`); e.setDate(e.getDate() + 1)
+        return { start: s.toISOString(), end: e.toISOString() }
+    }
+
+    const filterKey = `${searchTerm}|${filterBranchId}|${filterMode}|${filterDay}|${filterMonth}|${filterYear}|${filterStartDate}|${filterEndDate}`
+    const prevFilterKey = useRef(filterKey)
+
+    useEffect(() => {
+        if (prevFilterKey.current !== filterKey) {
+            prevFilterKey.current = filterKey
+            setPage(1)
+            fetchSales(1)
+            return
+        }
+        fetchSales(page)
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [page, filterKey])
 
     async function checkUserRole() {
         const { data: { user } } = await supabase.auth.getUser()
@@ -115,7 +164,7 @@ export default function Sales() {
         }
     }
 
-    async function fetchSales() {
+    async function fetchSales(page = 1) {
         try {
             setLoading(true)
             setError(null)
@@ -126,8 +175,10 @@ export default function Sales() {
                     customers:customer_id (*),
                     branches:branch_id (*),
                     profiles:profiles!fk_sales_user (full_name)
-                `)
-                .order('created_at', { ascending: false })
+                `, { count: 'exact' })
+
+            let filteredTotalsQuery = supabase.from('sales').select('total')
+            let todayTotalsQuery = supabase.from('sales').select('total')
 
             // Security: if not admin, restrict to assigned branches
             const { data: { user } } = await supabase.auth.getUser()
@@ -138,18 +189,61 @@ export default function Sales() {
                     const assignedIds = assignments?.map(a => a.branch_id) || []
                     if (assignedIds.length > 0) {
                         query = query.in('branch_id', assignedIds)
+                        filteredTotalsQuery = filteredTotalsQuery.in('branch_id', assignedIds)
+                        todayTotalsQuery = todayTotalsQuery.in('branch_id', assignedIds)
                     } else {
                         setSales([])
+                        setMetrics({ totalFiltrado: 0, ventasHoy: 0, ticketPromedio: 0, transacciones: 0 })
                         setLoading(false)
                         return
                     }
                 }
             }
 
-            const { data, error } = await query
+            if (filterBranchId !== 'all') {
+                query = query.eq('branch_id', filterBranchId)
+                filteredTotalsQuery = filteredTotalsQuery.eq('branch_id', filterBranchId)
+            }
+
+            const term = searchTerm.trim()
+            if (term) {
+                query = query.or(`sale_number::text.ilike.%${term}%,customers.name.ilike.%${term}%`)
+                filteredTotalsQuery = filteredTotalsQuery.or(`sale_number::text.ilike.%${term}%,customers.name.ilike.%${term}%`)
+            }
+
+            const bounds = getTimeBounds()
+            if (bounds) {
+                query = query.gte('created_at', bounds.start).lt('created_at', bounds.end)
+                filteredTotalsQuery = filteredTotalsQuery.gte('created_at', bounds.start).lt('created_at', bounds.end)
+            }
+
+            const todayBounds = localDayBounds(getLocalDate(new Date()))
+            if (todayBounds) {
+                todayTotalsQuery = todayTotalsQuery.gte('created_at', todayBounds.start).lt('created_at', todayBounds.end)
+            }
+
+            const from = (page - 1) * pageSize
+            const { data, error, count } = await query.order('created_at', { ascending: false }).range(from, from + pageSize - 1)
 
             if (error) throw error
+
+            const [filRes, todayRes] = await Promise.all([filteredTotalsQuery, todayTotalsQuery])
+            if (filRes.error) throw filRes.error
+            if (todayRes.error) throw todayRes.error
+
+            const fil = filRes.data || []
+            const sumFil = fil.reduce((a, s) => a + (s.total || 0), 0)
+
+            setMetrics({
+                totalFiltrado: sumFil,
+                ventasHoy: (todayRes.data || []).reduce((a, s) => a + (s.total || 0), 0),
+                ticketPromedio: fil.length > 0 ? sumFil / fil.length : 0,
+                transacciones: fil.length
+            })
+
             setSales(data || [])
+            setTotalSales(count || 0)
+            setPage(page)
         } catch (err) {
             console.error('Error fetching sales:', err)
             setError('Error al cargar el historial de ventas.')
@@ -184,10 +278,8 @@ export default function Sales() {
 
             // Wait for state to update and render before printing
             setTimeout(() => {
-                const printArea = ticketRef.current.innerHTML
-                const printWindow = window.open('', '_blank', 'width=800,height=600')
-                printWindow.document.write(`<html><head><title>Ticket #${sale.sale_number}</title><style>body{margin:0;padding:0;}</style></head><body>${printArea}<script>window.onload=()=>{window.print();window.onafterprint=()=>window.close();}</script></body></html>`)
-                printWindow.document.close()
+                const printArea = ticketRef.current?.innerHTML || ''
+                printHTML(`<html><head><title>Ticket #${sale.sale_number}</title><style>body{margin:0;padding:0;}</style></head><body>${printArea}</body></html>`)
             }, 100)
         } catch (err) {
             console.error(err)
@@ -198,15 +290,42 @@ export default function Sales() {
     }
 
 
-    const handleExportCSV = () => {
+    const handleExportCSV = async () => {
         try {
-            if (filteredSales.length === 0) {
+            let query = supabase
+                .from('sales')
+                .select(`
+                    *,
+                    customers:customer_id (name, tax_id),
+                    branches:branch_id (name),
+                    profiles:profiles!fk_sales_user (full_name)
+                `)
+
+            const { data: { user } } = await supabase.auth.getUser()
+            if (user) {
+                const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
+                if (profile?.role !== 'Administrador') {
+                    const { data: assignments } = await supabase.from('user_branches').select('branch_id').eq('user_id', user.id)
+                    const assignedIds = assignments?.map(a => a.branch_id) || []
+                    if (assignedIds.length > 0) query = query.in('branch_id', assignedIds)
+                }
+            }
+
+            if (filterBranchId !== 'all') query = query.eq('branch_id', filterBranchId)
+            const term = searchTerm.trim()
+            if (term) query = query.or(`sale_number::text.ilike.%${term}%,customers.name.ilike.%${term}%`)
+            const bounds = getTimeBounds()
+            if (bounds) query = query.gte('created_at', bounds.start).lt('created_at', bounds.end)
+
+            const { data } = await query.order('created_at', { ascending: false })
+
+            if (!data || data.length === 0) {
                 alert('No hay datos para exportar')
                 return
             }
 
             const headers = ['Orden,Cliente,NIT/CI,Sucursal,Vendedor,Fecha,Hora,Total']
-            const rows = filteredSales.map(s => {
+            const rows = data.map(s => {
                 const escape = (val) => `"${String(val || '').replace(/"/g, '""')}"`
                 return [
                     escape(s.sale_number),
@@ -349,44 +468,7 @@ export default function Sales() {
         }
     }
 
-    const filteredSales = sales.filter(s => {
-        const saleDate = new Date(s.created_at)
-        const saleLocalDate = getLocalDate(s.created_at)
-
-        const matchesSearch = (s.customers?.name?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
-            (s.sale_number?.toString() || '').includes(searchTerm) ||
-            (s.id?.toString() || '').includes(searchTerm)
-
-        const matchesBranch = filterBranchId === 'all' ||
-            String(s.branch_id || '') === String(filterBranchId) ||
-            String(s.branches?.id || '') === String(filterBranchId)
-
-        let matchesTime = true
-        if (filterMode === 'day') {
-            matchesTime = saleLocalDate === filterDay
-        } else if (filterMode === 'month') {
-            matchesTime = (saleDate.getMonth() + 1).toString() === filterMonth && saleDate.getFullYear().toString() === filterYear
-        } else if (filterMode === 'range') {
-            matchesTime = saleLocalDate >= filterStartDate && saleLocalDate <= filterEndDate
-        }
-
-        return matchesSearch && matchesBranch && matchesTime
-    })
-
-    // Metrics calculation (based on global sales but with local time awareness)
-    const today = getLocalDate(new Date())
-
-    const salesToday = sales.filter(s => getLocalDate(s.created_at) === today)
-    const totalToday = salesToday.reduce((acc, s) => acc + (s.total || 0), 0)
-
-    // Average ticket based on filtered list to provide context to the current view
-    const avgSale = filteredSales.length > 0 ? (filteredSales.reduce((acc, s) => acc + (s.total || 0), 0) / filteredSales.length) : 0
-
-    const totalMonth = sales.filter(s => {
-        const d = new Date(s.created_at)
-        const now = new Date()
-        return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear()
-    }).reduce((acc, s) => acc + (s.total || 0), 0)
+    const filteredSales = sales
 
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem', paddingBottom: '2rem' }}>
@@ -407,14 +489,11 @@ export default function Sales() {
                     <p style={{ opacity: 0.5, fontWeight: '500' }}>Gestión integral de transacciones y facturación</p>
                 </div>
                 <div style={{ display: 'flex', gap: '0.75rem' }}>
-                    <button className="btn" onClick={fetchSales} disabled={loading} style={{ padding: '0.75rem', borderRadius: '14px', backgroundColor: 'hsl(var(--secondary) / 0.5)' }}>
+                    <button className="btn" onClick={() => fetchSales(page)} disabled={loading} style={{ padding: '0.75rem', borderRadius: '14px', backgroundColor: 'hsl(var(--secondary) / 0.5)' }}>
                         <RefreshCw size={20} className={loading ? 'animate-spin' : ''} />
                     </button>
                     <button className="btn" onClick={handleExportCSV} style={{ padding: '0.75rem', borderRadius: '14px', backgroundColor: 'hsl(var(--secondary) / 0.5)' }} title="Exportar CSV">
                         <Download size={20} />
-                    </button>
-                    <button className="btn btn-primary shadow-lg shadow-primary/20" onClick={() => { setEditingSale(null); setIsModalOpen(true); }} style={{ padding: '0.75rem 1.5rem', borderRadius: '14px', fontWeight: '800', gap: '0.5rem' }}>
-                        <Plus size={20} /> NUEVA VENTA
                     </button>
                 </div>
             </div>
@@ -422,10 +501,10 @@ export default function Sales() {
             {/* Metrics Dashboard */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1.5rem' }}>
                 {[
-                    { label: 'Total Filtrado', val: `${currencySymbol}${filteredSales.reduce((acc, s) => acc + (s.total || 0), 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`, icon: <TrendingUp size={24} />, bg: 'linear-gradient(135deg, hsl(142 76% 36%), hsl(142 70% 45%))', trend: `Sumatoria actual` },
-                    { label: 'Ventas Hoy (Gral)', val: `${currencySymbol}${sales.filter(s => new Date(s.created_at).toLocaleDateString('sv-SE') === today).reduce((acc, s) => acc + (s.total || 0), 0).toFixed(0)}`, icon: <Target size={24} />, bg: 'linear-gradient(135deg, hsl(var(--primary)), hsl(var(--primary) / 0.8))', trend: 'Total global' },
-                    { label: 'Ticket Promedio', val: `${currencySymbol}${filteredSales.length > 0 ? (filteredSales.reduce((acc, s) => acc + (s.total || 0), 0) / filteredSales.length).toFixed(0) : 0}`, icon: <DollarSign size={24} />, bg: 'linear-gradient(135deg, #6366f1, #818cf8)', trend: 'De lo filtrado' },
-                    { label: 'Transacciones', val: filteredSales.length, icon: <ClipboardList size={24} />, bg: 'linear-gradient(135deg, #f59e0b, #fbbf24)', trend: 'Resultados encontrados' }
+                    { label: 'Total Filtrado', val: `${currencySymbol}${metrics.totalFiltrado.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`, icon: <TrendingUp size={24} />, bg: 'linear-gradient(135deg, hsl(142 76% 36%), hsl(142 70% 45%))', trend: `Sumatoria actual` },
+                    { label: 'Ventas Hoy (Gral)', val: `${currencySymbol}${metrics.ventasHoy.toFixed(0)}`, icon: <Target size={24} />, bg: 'linear-gradient(135deg, hsl(var(--primary)), hsl(var(--primary) / 0.8))', trend: 'Total global' },
+                    { label: 'Ticket Promedio', val: `${currencySymbol}${metrics.ticketPromedio.toFixed(0)}`, icon: <DollarSign size={24} />, bg: 'linear-gradient(135deg, #6366f1, #818cf8)', trend: 'De lo filtrado' },
+                    { label: 'Transacciones', val: metrics.transacciones, icon: <ClipboardList size={24} />, bg: 'linear-gradient(135deg, #f59e0b, #fbbf24)', trend: 'Resultados encontrados' }
                 ].map((m, i) => (
 
                     <div key={i} className="card shadow-md" style={{ background: m.bg, color: 'white', border: 'none', padding: '1.5rem', borderRadius: '24px', display: 'flex', flexDirection: 'column', gap: '1rem', position: 'relative', overflow: 'hidden' }}>
@@ -646,25 +725,6 @@ export default function Sales() {
                                             {isAdmin && (
                                                 <div style={{ display: 'flex', gap: '0.25rem', marginRight: '0.75rem', backgroundColor: 'hsl(var(--secondary) / 0.5)', padding: '4px', borderRadius: '10px', border: '1px solid hsl(var(--border) / 0.3)' }}>
                                                     <button
-                                                        onClick={() => togglePermission(s.id, 'can_edit', s.can_edit)}
-                                                        className="btn-icon"
-                                                        title={s.can_edit ? "Bloquear Edición" : "Habilitar Edición"}
-                                                        style={{
-                                                            padding: '6px',
-                                                            borderRadius: '8px',
-                                                            border: 'none',
-                                                            backgroundColor: s.can_edit ? 'hsl(var(--primary) / 0.15)' : 'transparent',
-                                                            color: s.can_edit ? 'hsl(var(--primary))' : 'hsl(var(--foreground) / 0.3)',
-                                                            cursor: 'pointer',
-                                                            display: 'flex',
-                                                            alignItems: 'center',
-                                                            justifyContent: 'center',
-                                                            transition: 'all 0.2s'
-                                                        }}
-                                                    >
-                                                        <Edit2 size={14} />
-                                                    </button>
-                                                    <button
                                                         onClick={() => togglePermission(s.id, 'can_void', s.can_void)}
                                                         className="btn-icon"
                                                         title={s.can_void ? "Bloquear Anulación" : "Habilitar Anulación"}
@@ -688,11 +748,7 @@ export default function Sales() {
 
                                             <button onClick={() => handlePrint(s)} className="btn" style={{ padding: '0.5rem', borderRadius: '10px', backgroundColor: 'hsl(var(--secondary) / 0.5)', color: 'hsl(var(--foreground))' }} title="Imprimir Ticket"><Printer size={18} /></button>
 
-                                            {(isAdmin || s.can_edit) ? (
-                                                <button onClick={() => handleEdit(s, false)} className="btn" style={{ padding: '0.5rem', borderRadius: '10px', backgroundColor: 'hsl(var(--secondary) / 0.5)', color: 'hsl(var(--primary))' }} title="Modificar"><Edit2 size={18} /></button>
-                                            ) : (
-                                                <button onClick={() => handleEdit(s, true)} className="btn" style={{ padding: '0.5rem', borderRadius: '10px', backgroundColor: 'hsl(var(--secondary) / 0.2)', color: 'hsl(var(--foreground) / 0.3)' }} title="Ver Detalles"><Eye size={18} /></button>
-                                            )}
+                                            <button onClick={() => handleEdit(s, true)} className="btn" style={{ padding: '0.5rem', borderRadius: '10px', backgroundColor: 'hsl(var(--secondary) / 0.2)', color: 'hsl(var(--foreground) / 0.3)' }} title="Ver Detalles"><Eye size={18} /></button>
 
                                             {(isAdmin || s.can_void) && (
                                                 <button onClick={() => handleVoid(s)} className="btn" style={{ padding: '0.5rem', borderRadius: '10px', backgroundColor: 'hsl(var(--destructive) / 0.05)', color: 'hsl(var(--destructive))' }} title="Anular"><Trash2 size={18} /></button>
@@ -704,6 +760,15 @@ export default function Sales() {
                         )}
                     </tbody>
                 </table>
+
+                <Pagination
+                    page={page}
+                    totalPages={Math.max(1, Math.ceil(totalSales / pageSize))}
+                    totalItems={totalSales}
+                    onPageChange={(p) => setPage(p)}
+                    disabled={loading}
+                    label="ventas"
+                />
             </div>
 
             {/* Hidden Ticket reference for printing */}

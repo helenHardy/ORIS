@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react'
+import { printHTML } from '../lib/print'
+import Pagination from '../components/common/Pagination'
 import {
     Search,
     Plus,
@@ -22,7 +24,7 @@ import {
     X
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
-import QuotationModal from '../components/pos/QuotationModal'
+import QuotationPOS from '../components/pos/QuotationPOS'
 import CheckoutModal from '../components/pos/CheckoutModal'
 
 export default function Quotations() {
@@ -44,6 +46,12 @@ export default function Quotations() {
     const [filterYear, setFilterYear] = useState(new Date().getFullYear().toString())
     const [cashBoxes, setCashBoxes] = useState([])
 
+    // Pagination & metrics state
+    const [page, setPage] = useState(1)
+    const [totalQuotations, setTotalQuotations] = useState(0)
+    const pageSize = 15
+    const [metrics, setMetrics] = useState({ pendientes: 0, convertidas: 0, totalProyectado: 0, transacciones: 0 })
+
     const getLocalDate = (date) => {
         if (!date) return ''
         const d = new Date(date)
@@ -52,10 +60,50 @@ export default function Quotations() {
 
     useEffect(() => {
         setFilterDay(getLocalDate(new Date()))
-        fetchQuotations()
         fetchBranches()
         fetchSettings()
     }, [])
+
+    const getTimeBounds = () => {
+        let start, end
+        if (filterMode === 'day') {
+            if (!filterDay) return null
+            start = new Date(`${filterDay}T00:00:00`)
+            end = new Date(`${filterDay}T00:00:00`); end.setDate(end.getDate() + 1)
+        } else if (filterMode === 'month') {
+            start = new Date(`${filterYear}-${String(filterMonth).padStart(2, '0')}-01T00:00:00`)
+            end = new Date(start); end.setMonth(end.getMonth() + 1)
+        } else if (filterMode === 'year') {
+            start = new Date(`${filterYear}-01-01T00:00:00`)
+            end = new Date(`${Number(filterYear) + 1}-01-01T00:00:00`)
+        }
+        if (!start || isNaN(start.getTime()) || isNaN(end.getTime())) return null
+        return { start: start.toISOString(), end: end.toISOString() }
+    }
+
+    const computeQuoteMetrics = (list) => {
+        const pend = (list || []).filter(q => q.status === 'Pendiente')
+        return {
+            pendientes: pend.length,
+            convertidas: (list || []).filter(q => q.status === 'Convertido').length,
+            totalProyectado: pend.reduce((a, q) => a + (q.total || 0), 0),
+            transacciones: (list || []).length
+        }
+    }
+
+    const filterKey = `${searchTerm}|${filterBranchId}|${filterMode}|${filterDay}|${filterMonth}|${filterYear}`
+    const prevFilterKey = useRef(filterKey)
+
+    useEffect(() => {
+        if (prevFilterKey.current !== filterKey) {
+            prevFilterKey.current = filterKey
+            setPage(1)
+            fetchQuotations(1)
+            return
+        }
+        fetchQuotations(page)
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [page, filterKey])
 
     async function fetchSettings() {
         const { data } = await supabase.from('settings').select('*')
@@ -97,25 +145,95 @@ export default function Quotations() {
         }
     }
 
-    async function fetchQuotations() {
+    async function fetchQuotations(page = 1) {
         try {
             setLoading(true)
             setError(null)
-            const { data, error } = await supabase
+
+            let query = supabase
                 .from('quotations')
                 .select(`
                     *,
                     customers(name, tax_id),
                     branches(name),
                     profiles:user_id(full_name)
-                `)
-                .order('created_at', { ascending: false })
+                `, { count: 'exact' })
+
+            let metricsQuery = supabase.from('quotations').select('status, total')
+
+            if (filterBranchId !== 'all') {
+                query = query.eq('branch_id', filterBranchId)
+                metricsQuery = metricsQuery.eq('branch_id', filterBranchId)
+            }
+
+            const term = searchTerm.trim()
+            if (term) {
+                query = query.or(`quotation_number::text.ilike.%${term}%,customers.name.ilike.%${term}%`)
+                metricsQuery = metricsQuery.or(`quotation_number::text.ilike.%${term}%,customers.name.ilike.%${term}%`)
+            }
+
+            const bounds = getTimeBounds()
+            if (bounds) {
+                query = query.gte('created_at', bounds.start).lt('created_at', bounds.end)
+                metricsQuery = metricsQuery.gte('created_at', bounds.start).lt('created_at', bounds.end)
+            }
+
+            const from = (page - 1) * pageSize
+            const { data, error, count } = await query.order('created_at', { ascending: false }).range(from, from + pageSize - 1)
 
             if (error) throw error
+
+            const { data: metricsData } = await metricsQuery
+            setMetrics(computeQuoteMetrics(metricsData))
+
             setQuotations(data || [])
+            setTotalQuotations(count || 0)
+            setPage(page)
         } catch (err) {
             console.error('Error fetching quotations:', err)
             setError('Error al cargar las cotizaciones.')
+        } finally {
+            setLoading(false)
+        }
+    }
+
+    const openNew = () => {
+        setEditingQuotation(null)
+        setIsModalOpen(true)
+    }
+
+    const openEdit = async (quotation) => {
+        try {
+            setLoading(true)
+            const { data: items } = await supabase
+                .from('quotation_items')
+                .select('*, products(id, name, sku, image_url, unit_of_measure, price)')
+                .eq('quotation_id', quotation.id)
+
+            if (items && items.length > 0) {
+                const mapped = items.map(item => ({
+                    id: item.product_id,
+                    product_id: item.product_id,
+                    name: item.products?.name,
+                    sku: item.products?.sku,
+                    image_url: item.products?.image_url,
+                    unit_of_measure: item.products?.unit_of_measure,
+                    quantity: item.quantity,
+                    price: item.price,
+                    total: item.price * item.quantity,
+                    base_price: item.products?.price || item.price,
+                    is_damaged: !!item.is_damaged,
+                    stock: Infinity,
+                    damaged_stock: Infinity
+                }))
+                setEditingQuotation({ ...quotation, items: mapped })
+            } else {
+                setEditingQuotation({ ...quotation, items: [] })
+            }
+            setIsModalOpen(true)
+        } catch (err) {
+            console.error('Error loading quotation items:', err)
+            alert('Error al cargar los ítems de la cotización')
         } finally {
             setLoading(false)
         }
@@ -162,7 +280,8 @@ export default function Quotations() {
                     product_id: item.product_id,
                     quantity: item.quantity,
                     price: item.price,
-                    total: item.price * item.quantity
+                    total: item.price * item.quantity,
+                    is_damaged: !!item.is_damaged
                 }))
             )
             if (itemsError) throw itemsError
@@ -222,17 +341,21 @@ export default function Quotations() {
             const productIds = qItems.map(i => i.product_id)
             const { data: stockData } = await supabase
                 .from('product_branch_settings')
-                .select('product_id, stock')
+                .select('product_id, stock, damaged_stock')
                 .in('product_id', productIds)
                 .eq('branch_id', quotation.branch_id)
 
             const stockMap = {}
-            stockData?.forEach(s => stockMap[s.product_id] = s.stock)
+            const damagedStockMap = {}
+            stockData?.forEach(s => {
+                stockMap[s.product_id] = s.stock
+                damagedStockMap[s.product_id] = s.damaged_stock || 0
+            })
 
             for (const item of qItems) {
-                const available = stockMap[item.product_id] || 0
+                const available = item.is_damaged ? (damagedStockMap[item.product_id] || 0) : (stockMap[item.product_id] || 0)
                 if (item.quantity > available) {
-                    throw new Error(`Stock insuficiente para "${item.products.name}". Disponible: ${available}, Requerido: ${item.quantity}`)
+                    throw new Error(`Stock insuficiente (${item.is_damaged ? 'merma' : 'normal'}) para "${item.products.name}". Disponible: ${available}, Requerido: ${item.quantity}`)
                 }
             }
 
@@ -268,7 +391,8 @@ export default function Quotations() {
                     product_id: item.product_id,
                     quantity: item.quantity,
                     price: item.price,
-                    total: item.total
+                    total: item.total,
+                    is_damaged: !!item.is_damaged
                 })))
 
             if (saleItemsErr) throw saleItemsErr
@@ -315,12 +439,6 @@ export default function Quotations() {
                 .eq('quotation_id', quotation.id)
 
             if (error) throw error
-
-            const printWindow = window.open('', '_blank', 'width=900,height=800')
-            if (!printWindow) {
-                alert('Por favor, permite las ventanas emergentes para imprimir.')
-                return
-            }
 
             const styles = `
                 @page { size: A4; margin: 2cm; }
@@ -440,15 +558,11 @@ export default function Quotations() {
                         </div>
                     </div>
 
-                    <script>
-                        window.onload = function() { window.print(); }
-                    </script>
-                </body>
+                    </body>
                 </html>
             `
 
-            printWindow.document.write(html)
-            printWindow.document.close()
+            printHTML(html)
 
         } catch (err) {
             console.error('Error printing quotation:', err)
@@ -470,35 +584,15 @@ export default function Quotations() {
         }
     }
 
-    const filteredQuotations = quotations.filter(q => {
-        const qDate = new Date(q.created_at)
-        const qLocalDate = getLocalDate(q.created_at)
-
-        const matchesSearch = (q.customers?.name?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
-            (q.quotation_number?.toString() || '').includes(searchTerm) ||
-            (q.id?.toString() || '').includes(searchTerm)
-
-        const matchesBranch = filterBranchId === 'all' || String(q.branch_id || '') === String(filterBranchId)
-
-        let matchesTime = true
-        if (filterMode === 'day') {
-            matchesTime = qLocalDate === filterDay
-        } else if (filterMode === 'month') {
-            matchesTime = (qDate.getMonth() + 1).toString() === filterMonth && qDate.getFullYear().toString() === filterYear
-        } else if (filterMode === 'year') {
-            matchesTime = qDate.getFullYear().toString() === filterYear
-        }
-
-        return matchesSearch && matchesBranch && matchesTime
-    })
+    const filteredQuotations = quotations
 
     const today = getLocalDate(new Date())
 
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem', paddingBottom: '2rem' }}>
             {isModalOpen && (
-                <QuotationModal
-                    quotation={editingQuotation}
+                <QuotationPOS
+                    initialData={editingQuotation}
                     isSaving={isSaving}
                     currencySymbol={currencySymbol}
                     onClose={() => { setIsModalOpen(false); setEditingQuotation(null); }}
@@ -506,6 +600,8 @@ export default function Quotations() {
                 />
             )}
 
+            {!isModalOpen && (
+            <>
             {isCheckoutOpen && convertingQuotation && (
                 <CheckoutModal
                     total={convertingQuotation.total}
@@ -528,10 +624,10 @@ export default function Quotations() {
                     <p style={{ opacity: 0.5, fontWeight: '500' }}>Gestión de proformas y presupuestos para clientes</p>
                 </div>
                 <div style={{ display: 'flex', gap: '0.75rem' }}>
-                    <button className="btn" onClick={fetchQuotations} disabled={loading} style={{ padding: '0.75rem', borderRadius: '14px', backgroundColor: 'hsl(var(--secondary) / 0.5)' }}>
+                    <button className="btn" onClick={() => fetchQuotations(page)} disabled={loading} style={{ padding: '0.75rem', borderRadius: '14px', backgroundColor: 'hsl(var(--secondary) / 0.5)' }}>
                         <RefreshCw size={20} className={loading ? 'animate-spin' : ''} />
                     </button>
-                    <button className="btn btn-primary shadow-lg shadow-primary/20" onClick={() => { setEditingQuotation(null); setIsModalOpen(true); }} style={{ padding: '0.75rem 1.5rem', borderRadius: '14px', fontWeight: '800', gap: '0.5rem' }}>
+                    <button className="btn btn-primary shadow-lg shadow-primary/20" onClick={openNew} style={{ padding: '0.75rem 1.5rem', borderRadius: '14px', fontWeight: '800', gap: '0.5rem' }}>
                         <Plus size={20} /> NUEVA COTIZACIÓN
                     </button>
                 </div>
@@ -540,10 +636,10 @@ export default function Quotations() {
             {/* Metrics Dashboard (Simplified for Quotes) */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1.5rem' }}>
                 {[
-                    { label: 'Pendientes', val: filteredQuotations.filter(q => q.status === 'Pendiente').length, icon: <Clock size={24} />, bg: 'linear-gradient(135deg, #f59e0b, #fbbf24)', trend: 'Por convertir' },
-                    { label: 'Convertidas', val: filteredQuotations.filter(q => q.status === 'Convertido').length, icon: <CheckCircle size={24} />, bg: 'linear-gradient(135deg, #10b981, #34d399)', trend: 'Ventas cerradas' },
-                    { label: 'Total Proyectado', val: `${currencySymbol}${filteredQuotations.filter(q => q.status === 'Pendiente').reduce((acc, q) => acc + (q.total || 0), 0).toLocaleString()}`, icon: <TrendingUp size={24} />, bg: 'linear-gradient(135deg, #6366f1, #818cf8)', trend: 'En negociación' },
-                    { label: 'Transacciones', val: filteredQuotations.length, icon: <FileText size={24} />, bg: 'linear-gradient(135deg, #6b7280, #9ca3af)', trend: 'Citas totales' }
+                    { label: 'Pendientes', val: metrics.pendientes, icon: <Clock size={24} />, bg: 'linear-gradient(135deg, #f59e0b, #fbbf24)', trend: 'Por convertir' },
+                    { label: 'Convertidas', val: metrics.convertidas, icon: <CheckCircle size={24} />, bg: 'linear-gradient(135deg, #10b981, #34d399)', trend: 'Ventas cerradas' },
+                    { label: 'Total Proyectado', val: `${currencySymbol}${metrics.totalProyectado.toLocaleString()}`, icon: <TrendingUp size={24} />, bg: 'linear-gradient(135deg, #6366f1, #818cf8)', trend: 'En negociación' },
+                    { label: 'Transacciones', val: metrics.transacciones, icon: <FileText size={24} />, bg: 'linear-gradient(135deg, #6b7280, #9ca3af)', trend: 'Citas totales' }
                 ].map((m, i) => (
                     <div key={i} className="card shadow-md" style={{ background: m.bg, color: 'white', border: 'none', padding: '1.5rem', borderRadius: '24px', display: 'flex', flexDirection: 'column', gap: '1rem', position: 'relative', overflow: 'hidden' }}>
                         <div style={{ position: 'absolute', top: '-10px', right: '-10px', opacity: 0.1, transform: 'rotate(-15deg)' }}>{m.icon}</div>
@@ -739,7 +835,7 @@ export default function Quotations() {
                                             )}
                                             <button onClick={() => handlePrint(q)} className="btn" style={{ padding: '0.5rem', borderRadius: '10px', backgroundColor: 'hsl(var(--secondary) / 0.5)' }} title="Imprimir"><Printer size={18} /></button>
                                             {q.status === 'Pendiente' && (
-                                                <button onClick={() => { setEditingQuotation(q); setIsModalOpen(true); }} className="btn" style={{ padding: '0.5rem', borderRadius: '10px', backgroundColor: 'hsl(var(--secondary) / 0.5)', color: 'hsl(var(--primary))' }} title="Editar"><Eye size={18} /></button>
+                                                <button onClick={() => openEdit(q)} className="btn" style={{ padding: '0.5rem', borderRadius: '10px', backgroundColor: 'hsl(var(--secondary) / 0.5)', color: 'hsl(var(--primary))' }} title="Editar"><Eye size={18} /></button>
                                             )}
                                             {q.status === 'Pendiente' && (
                                                 <button onClick={() => handleVoid(q.id)} className="btn" style={{ padding: '0.5rem', borderRadius: '10px', backgroundColor: 'hsl(var(--destructive) / 0.05)', color: 'hsl(var(--destructive))' }} title="Anular"><X size={18} /></button>
@@ -754,7 +850,18 @@ export default function Quotations() {
                         )}
                     </tbody>
                 </table>
+
+                <Pagination
+                    page={page}
+                    totalPages={Math.max(1, Math.ceil(totalQuotations / pageSize))}
+                    totalItems={totalQuotations}
+                    onPageChange={(p) => setPage(p)}
+                    disabled={loading}
+                    label="cotizaciones"
+                />
             </div>
+            </>
+            )}
         </div>
     )
 }

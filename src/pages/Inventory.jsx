@@ -6,6 +6,7 @@ import ProductModal from '../components/inventory/ProductModal'
 import KardexDrawer from '../components/inventory/KardexDrawer'
 import MermaModal from '../components/inventory/MermaModal'
 import ImportModal from '../components/inventory/ImportModal'
+import Pagination from '../components/common/Pagination'
 
 const getFirstImageUrl = (url) => {
     if (!url) return '';
@@ -38,6 +39,11 @@ export default function Inventory() {
     const [selectedBrandId, setSelectedBrandId] = useState('')
     const [currencySymbol, setCurrencySymbol] = useState('Bs.')
     const [showInactive, setShowInactive] = useState(false)
+
+    // Pagination state
+    const [page, setPage] = useState(1)
+    const [totalProducts, setTotalProducts] = useState(0)
+    const pageSize = 15
 
     // UI state
     const [toast, setToast] = useState(null)
@@ -106,8 +112,9 @@ export default function Inventory() {
     }
 
     useEffect(() => {
-        fetchProducts()
-    }, [selectedBranchId, showInactive])
+        setPage(1)
+        fetchProducts(1)
+    }, [selectedBranchId, showInactive, searchTerm, selectedCategoryId, selectedSubcategoryId, selectedBrandId])
 
     async function fetchBranches() {
         try {
@@ -147,38 +154,71 @@ export default function Inventory() {
         }
     }
 
-    const handleExport = () => {
-        const headers = ['SKU', 'Nombre', 'Categoría', 'Precio', 'Stock', 'Mínimo']
-        const rows = filteredProducts.map(p => [
-            p.sku,
-            p.name,
-            p.category,
-            p.current_price,
-            p.current_stock,
-            p.current_min_stock
-        ])
+    const handleExport = async () => {
+        try {
+            let query = supabase
+                .from('products')
+                .select(`
+                    *,
+                    category:categories(name),
+                    settings:product_branch_settings(*)
+                `)
 
-        const csvContent = [
-            headers.join(','),
-            ...rows.map(row => row.map(cell => `"${cell}"`).join(','))
-        ].join('\n')
+            if (selectedBranchId !== 'all') {
+                query = query.eq('settings.branch_id', selectedBranchId)
+            }
+            if (!showInactive) {
+                query = query.eq('active', true)
+            }
+            const term = searchTerm.trim()
+            if (term) {
+                query = query.or(`name.ilike.%${term}%,sku.ilike.%${term}%`)
+            }
+            if (selectedCategoryId) query = query.eq('category_id', selectedCategoryId)
+            if (selectedSubcategoryId) query = query.eq('subcategory_id', selectedSubcategoryId)
+            if (selectedBrandId) query = query.eq('brand_id', selectedBrandId)
 
-        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
-        const link = document.createElement('a')
-        const url = URL.createObjectURL(blob)
-        link.setAttribute('href', url)
-        link.setAttribute('download', `inventario_${new Date().toLocaleDateString('sv-SE')}.csv`)
-        link.style.visibility = 'hidden'
-        document.body.appendChild(link)
-        link.click()
-        document.body.removeChild(link)
+            const { data } = await query.order('name')
+
+            const headers = ['SKU', 'Nombre', 'Categoría', 'Precio', 'Stock', 'Mínimo']
+            const rows = (data || []).map(p => {
+                const s = selectedBranchId !== 'all' ? (p.settings ? p.settings[0] : null) : null
+                return [
+                    p.sku,
+                    p.name,
+                    p.category?.name,
+                    selectedBranchId !== 'all' ? ((s && s.price) ? s.price : p.price) : p.price,
+                    selectedBranchId !== 'all' ? (s ? s.stock : 0) : p.stock,
+                    selectedBranchId !== 'all' ? ((s && s.min_stock) ? s.min_stock : p.min_stock) : p.min_stock
+                ]
+            })
+
+            const csvContent = [
+                headers.join(','),
+                ...rows.map(row => row.map(cell => `"${cell}"`).join(','))
+            ].join('\n')
+
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+            const link = document.createElement('a')
+            const url = URL.createObjectURL(blob)
+            link.setAttribute('href', url)
+            link.setAttribute('download', `inventario_${new Date().toLocaleDateString('sv-SE')}.csv`)
+            link.style.visibility = 'hidden'
+            document.body.appendChild(link)
+            link.click()
+            document.body.removeChild(link)
+        } catch (err) {
+            console.error('Error exporting inventory:', err)
+            showToast('Error al exportar el inventario', 'error')
+        }
     }
 
-    async function fetchProducts() {
+    async function fetchProducts(page = 1) {
         try {
             setLoading(true)
             setError(null)
 
+            const from = (page - 1) * pageSize
             let query = supabase
                 .from('products')
                 .select(`
@@ -186,28 +226,26 @@ export default function Inventory() {
                     category:categories(name),
                     subcategory:subcategories(name),
                     brand:brands(name),
-                    product_branch_settings(*)
-                `)
+                    settings:product_branch_settings(*)
+                `, { count: 'exact' })
 
             if (selectedBranchId !== 'all') {
-                // Filter by specific branch using the join table
-                query = supabase
-                    .from('products')
-                    .select(`
-                        *,
-                        category:categories(name),
-                        subcategory:subcategories(name),
-                        brand:brands(name),
-                        settings:product_branch_settings(*)
-                    `)
-                    .eq('settings.branch_id', selectedBranchId)
+                query = query.eq('settings.branch_id', selectedBranchId)
             }
 
             if (!showInactive) {
                 query = query.eq('active', true)
             }
 
-            const { data, error } = await query.order('name')
+            const term = searchTerm.trim()
+            if (term) {
+                query = query.or(`name.ilike.%${term}%,sku.ilike.%${term}%`)
+            }
+            if (selectedCategoryId) query = query.eq('category_id', selectedCategoryId)
+            if (selectedSubcategoryId) query = query.eq('subcategory_id', selectedSubcategoryId)
+            if (selectedBrandId) query = query.eq('brand_id', selectedBrandId)
+
+            const { data, error, count } = await query.order('name').range(from, from + pageSize - 1)
 
             if (error) throw error
 
@@ -227,6 +265,8 @@ export default function Inventory() {
             })
 
             setProducts(mappedProducts || [])
+            setTotalProducts(count || 0)
+            setPage(page)
         } catch (err) {
             console.error('Error fetching products:', err)
             setError('Error al cargar los productos.')
@@ -382,13 +422,6 @@ export default function Inventory() {
     }
 
     const filteredProducts = products
-        .filter(p =>
-            (p.name?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
-            (p.sku?.toLowerCase() || '').includes(searchTerm.toLowerCase())
-        )
-        .filter(p => !selectedCategoryId || String(p.category_id) === String(selectedCategoryId))
-        .filter(p => !selectedSubcategoryId || String(p.subcategory_id) === String(selectedSubcategoryId))
-        .filter(p => !selectedBrandId || String(p.brand_id) === String(selectedBrandId))
 
     return (
         <div style={{ position: 'relative', paddingBottom: '2rem' }}>
@@ -532,7 +565,7 @@ export default function Inventory() {
                     
                     <button
                         className="btn"
-                        onClick={fetchProducts}
+                        onClick={() => fetchProducts(page)}
                         disabled={loading}
                         style={{ backgroundColor: 'hsl(var(--secondary) / 0.8)', padding: '0.5rem', borderRadius: '12px' }}
                     >
@@ -1099,6 +1132,15 @@ export default function Inventory() {
                         )}
                     </tbody>
                 </table>
+
+                <Pagination
+                    page={page}
+                    totalPages={Math.max(1, Math.ceil(totalProducts / pageSize))}
+                    totalItems={totalProducts}
+                    onPageChange={(p) => { setPage(p); fetchProducts(p) }}
+                    disabled={loading}
+                    label="productos"
+                />
             </div>
         </div >
     )

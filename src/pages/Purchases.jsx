@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react'
-import { Plus, Search, ClipboardList, RefreshCw, AlertTriangle, Truck, Building2, Calendar, User, Eye, Edit2, Trash2, ShoppingBag, ArrowUpRight, TrendingUp, CheckCircle, X, Loader2, Save } from 'lucide-react'
+import { Plus, Search, ClipboardList, RefreshCw, AlertTriangle, Truck, Building2, Calendar, User, Eye, Edit2, Trash2, ShoppingBag, ArrowUpRight, TrendingUp, CheckCircle, X, Loader2, Save, Printer } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { printHTML } from '../lib/print'
 import PurchaseModal from '../components/inventory/PurchaseModal'
+import Pagination from '../components/common/Pagination'
 
 export default function Purchases() {
     const [purchases, setPurchases] = useState([])
@@ -40,11 +42,20 @@ export default function Purchases() {
         avgPurchase: 0
     })
 
+    // Pagination state
+    const [page, setPage] = useState(1)
+    const [totalPurchases, setTotalPurchases] = useState(0)
+    const pageSize = 15
+
     useEffect(() => {
         checkUserRole()
-        fetchPurchases()
         fetchSettings()
     }, [])
+
+    useEffect(() => {
+        fetchPurchases(page)
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [page, searchTerm])
 
     async function checkUserRole() {
         const { data: { user } } = await supabase.auth.getUser()
@@ -65,7 +76,7 @@ export default function Purchases() {
         }
     }
 
-    async function fetchPurchases() {
+    async function fetchPurchases(page = 1) {
         try {
             setLoading(true)
             setError(null)
@@ -88,19 +99,37 @@ export default function Purchases() {
                     suppliers:supplier_id (name),
                     branches:branch_id (name),
                     profiles:profiles!fk_purchases_user (full_name)
-                `)
-                .order('created_at', { ascending: false })
+                `, { count: 'exact' })
+
+            let statsQuery = supabase.from('purchases').select('total, created_at')
 
             // Filter by branches if assigned
             if (assignedIds.length > 0) {
                 query = query.in('branch_id', assignedIds)
+                statsQuery = statsQuery.in('branch_id', assignedIds)
             }
 
-            const { data, error } = await query
+            const term = searchTerm.trim()
+            if (term) {
+                query = query.or(`purchase_number::text.ilike.%${term}%,suppliers.name.ilike.%${term}%`)
+            }
+
+            // Stats: current month only (lightweight)
+            const now = new Date()
+            const startOfMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
+            statsQuery = statsQuery.gte('created_at', startOfMonth)
+
+            const from = (page - 1) * pageSize
+            const { data, error, count } = await query.order('created_at', { ascending: false }).range(from, from + pageSize - 1)
 
             if (error) throw error
+
+            const { data: statsData } = await statsQuery
+            calculateStats(statsData || [])
+
             setPurchases(data || [])
-            calculateStats(data || [])
+            setTotalPurchases(count || 0)
+            setPage(page)
         } catch (err) {
             console.error('Error fetching purchases:', err)
             setError('Error al cargar el historial de compras.')
@@ -348,11 +377,155 @@ export default function Purchases() {
         }
     }
 
-    const filteredPurchases = purchases.filter(p =>
-        (p.suppliers?.name || 'Sin Proveedor').toLowerCase().includes(searchTerm.toLowerCase()) ||
-        p.purchase_number?.toString().includes(searchTerm) ||
-        p.id.toString().includes(searchTerm)
-    )
+    const filteredPurchases = purchases
+
+    const printPurchase = async (purchase) => {
+        try {
+            setLoading(true)
+            const { data: items, error } = await supabase
+                .from('purchase_items')
+                .select('*, products(name, sku)')
+                .eq('purchase_id', purchase.id)
+            if (error) throw error
+
+            const subtotal = (items || []).reduce((acc, i) => acc + (Number(i.total) || 0), 0)
+            const paidLabel = purchase.payment_status === 'paid' ? 'Pagado'
+                : purchase.payment_status === 'partial' ? 'Parcial' : 'Pendiente'
+            const balance = (Number(purchase.total) || 0) - (Number(purchase.amount_paid) || 0)
+
+            const styles = `
+                @page { size: A4; margin: 2cm; }
+                body { font-family: 'Inter', sans-serif; color: #333; line-height: 1.5; font-size: 12px; }
+                .header { display: flex; justify-content: space-between; margin-bottom: 2rem; border-bottom: 2px solid #eee; padding-bottom: 1rem; }
+                .company-info h1 { margin: 0; color: #111; font-size: 24px; text-transform: uppercase; letter-spacing: -0.5px; }
+                .company-info p { margin: 2px 0; color: #666; }
+                .invoice-details { text-align: right; }
+                .invoice-details h2 { margin: 0; font-size: 18px; color: #111; }
+                .invoice-details p { margin: 2px 0; color: #666; }
+                .section-title { font-size: 10px; font-weight: 700; text-transform: uppercase; color: #999; margin-bottom: 0.5rem; letter-spacing: 1px; }
+                .customer-box { background: #f9fafb; padding: 1.5rem; border-radius: 8px; margin-bottom: 2rem; }
+                .customer-box h3 { margin: 0 0 0.5rem 0; font-size: 14px; color: #111; }
+                .customer-box p { margin: 2px 0; color: #555; }
+                table { width: 100%; border-collapse: collapse; margin-bottom: 2rem; }
+                th { text-align: left; padding: 0.75rem 0; border-bottom: 1px solid #ddd; font-weight: 700; color: #555; font-size: 10px; text-transform: uppercase; }
+                td { padding: 0.75rem 0; border-bottom: 1px solid #eee; color: #111; }
+                .text-right { text-align: right; }
+                .totals { display: flex; justify-content: flex-end; }
+                .totals-box { width: 250px; }
+                .totals-row { display: flex; justify-content: space-between; padding: 0.5rem 0; border-bottom: 1px solid #eee; }
+                .totals-row.final { border-bottom: none; border-top: 2px solid #111; margin-top: 0.5rem; padding-top: 1rem; }
+                .totals-row span:first-child { color: #666; font-weight: 600; }
+                .totals-row.final span { font-size: 16px; font-weight: 900; color: #111; }
+                .totals-row.debt span { color: #ef4444; font-weight: 700; }
+                .footer { margin-top: 4rem; padding-top: 2rem; border-top: 1px solid #eee; display: flex; justify-content: space-between; color: #888; font-size: 10px; }
+                .signature { width: 200px; text-align: center; margin-top: 3rem; padding-top: 1rem; border-top: 1px solid #ddd; }
+            `
+
+            const html = `
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <meta charset="utf-8">
+                    <title>Orden de Compra #${purchase.purchase_number}</title>
+                    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;900&display=swap" rel="stylesheet">
+                    <style>${styles}</style>
+                </head>
+                <body>
+                    <div class="header">
+                        <div class="company-info">
+                            <h1>Casa Oris</h1>
+                            <p>Zona Villa Adela, Calle "J" #2</p>
+                            <p>Tel: 76282003 | info@casaoris.com</p>
+                        </div>
+                        <div class="invoice-details">
+                            <h2>ORDEN DE COMPRA</h2>
+                            <p style="font-size: 14px; font-weight: 700; color: #111;">#${purchase.purchase_number || purchase.id.toString().slice(0, 8)}</p>
+                            <p>Fecha: ${new Date(purchase.created_at).toLocaleDateString()}</p>
+                            <p>Sucursal: ${purchase.branches?.name || 'Matriz'}</p>
+                        </div>
+                    </div>
+
+                    <div class="customer-box">
+                        <div class="section-title">Proveedor</div>
+                        <h3>${purchase.suppliers?.name || 'Sin Proveedor'}</h3>
+                        <p>Registrada por: ${purchase.profiles?.full_name || 'Sistema'}</p>
+                    </div>
+
+                    <table>
+                        <thead>
+                            <tr>
+                                <th style="width: 50%;">Descripción</th>
+                                <th class="text-right">Cantidad</th>
+                                <th class="text-right">Costo Unit.</th>
+                                <th class="text-right">Total</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${(items || []).map(item => `
+                                <tr>
+                                    <td>
+                                        <div style="font-weight: 600;">${item.products?.name || 'Producto'}</div>
+                                        <div style="color: #666; font-size: 10px;">sku: ${item.products?.sku || ''}</div>
+                                    </td>
+                                    <td class="text-right">${item.quantity}</td>
+                                    <td class="text-right">${currencySymbol}${(Number(item.unit_cost) || 0).toFixed(2)}</td>
+                                    <td class="text-right" style="font-weight: 700;">${currencySymbol}${(Number(item.total) || 0).toFixed(2)}</td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+
+                    <div class="totals">
+                        <div class="totals-box">
+                            <div class="totals-row">
+                                <span>Subtotal</span>
+                                <span>${currencySymbol}${subtotal.toFixed(2)}</span>
+                            </div>
+                            <div class="totals-row">
+                                <span>Condición</span>
+                                <span>${purchase.is_credit ? 'Crédito (' + paidLabel + ')' : 'Contado'}</span>
+                            </div>
+                            ${purchase.payment_method ? `
+                                <div class="totals-row">
+                                    <span>Método de Pago</span>
+                                    <span>${purchase.payment_method}</span>
+                                </div>
+                            ` : ''}
+                            ${purchase.is_credit ? `
+                                <div class="totals-row">
+                                    <span>Abonado</span>
+                                    <span>${currencySymbol}${(Number(purchase.amount_paid) || 0).toFixed(2)}</span>
+                                </div>
+                                <div class="totals-row debt">
+                                    <span>Saldo</span>
+                                    <span>${currencySymbol}${balance.toFixed(2)}</span>
+                                </div>
+                            ` : ''}
+                            <div class="totals-row final">
+                                <span>TOTAL</span>
+                                <span>${currencySymbol}${(Number(purchase.total) || 0).toFixed(2)}</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="footer">
+                        <div style="flex: 2;">Gracias por su servicio.</div>
+                        <div class="signature">
+                            Firma Recibido
+                        </div>
+                    </div>
+                </body>
+                </html>
+            `
+
+            printHTML(html)
+        } catch (err) {
+            console.error('Error printing purchase:', err)
+            showToast('Error al imprimir la compra', 'error')
+        } finally {
+            setLoading(false)
+        }
+    }
 
     return (
         <div style={{ padding: '0.5rem' }}>
@@ -395,7 +568,7 @@ export default function Purchases() {
                 <div style={{ display: 'flex', gap: '0.75rem' }}>
                     <button
                         className="btn shadow-sm"
-                        onClick={fetchPurchases}
+                        onClick={() => fetchPurchases(page)}
                         disabled={loading}
                         style={{ backgroundColor: 'hsl(var(--secondary) / 0.5)', borderRadius: '12px', padding: '0.75rem' }}
                     >
@@ -467,7 +640,7 @@ export default function Purchases() {
                                 outline: 'none'
                              }}
                             value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
+                            onChange={(e) => { setSearchTerm(e.target.value); setPage(1) }}
                         />
                     </div>
                 </div>
@@ -659,6 +832,16 @@ export default function Purchases() {
                                                     </button>
                                                 )}
 
+                                                <button
+                                                    onClick={() => printPurchase(p)}
+                                                    disabled={loading}
+                                                    className="btn"
+                                                    style={{ padding: '0.5rem', borderRadius: '10px', backgroundColor: 'hsl(var(--secondary) / 0.5)', color: 'hsl(var(--primary))' }}
+                                                    title="Imprimir"
+                                                >
+                                                    <Printer size={18} />
+                                                </button>
+
                                                 {(isAdmin || p.can_void) && (
                                                     <button
                                                         onClick={() => confirmDelete(p)}
@@ -677,6 +860,15 @@ export default function Purchases() {
                         </tbody>
                     </table>
                 </div>
+
+                <Pagination
+                    page={page}
+                    totalPages={Math.max(1, Math.ceil(totalPurchases / pageSize))}
+                    totalItems={totalPurchases}
+                    onPageChange={(p) => setPage(p)}
+                    disabled={loading}
+                    label="compras"
+                />
             </div>
 
             {/* Toast Notification */}

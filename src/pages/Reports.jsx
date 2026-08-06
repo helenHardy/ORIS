@@ -16,8 +16,13 @@ const getFirstImageUrl = (url) => {
     return url;
 };
 
-// Helper for date formatting
-const formatDate = (date) => date.toISOString().split('T')[0]
+// Helper for date formatting (local calendar date)
+const formatDate = (date) => {
+    const y = date.getFullYear()
+    const m = String(date.getMonth() + 1).padStart(2, '0')
+    const d = String(date.getDate()).padStart(2, '0')
+    return `${y}-${m}-${d}`
+}
 
 export default function Reports() {
     // Filters State
@@ -152,7 +157,7 @@ export default function Reports() {
                 const chartData = (data || []).map(item => ({
                     date: item.report_date,
                     total: item.total_sales,
-                    label: new Date(item.report_date).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit' })
+                    label: new Date(item.report_date).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', timeZone: 'UTC' })
                 }))
 
                 // Calculate Totals
@@ -397,6 +402,7 @@ export default function Reports() {
                                         <th style={{ padding: '1rem 2rem', textAlign: 'left', fontSize: '0.85rem', fontWeight: '700', color: 'hsl(var(--muted-foreground))' }}>Producto</th>
                                         <th style={{ padding: '1rem 2rem', textAlign: 'right', fontSize: '0.85rem', fontWeight: '700', color: 'hsl(var(--muted-foreground))' }}>Unidades Vendidas</th>
                                         <th style={{ padding: '1rem 2rem', textAlign: 'right', fontSize: '0.85rem', fontWeight: '700', color: 'hsl(var(--muted-foreground))' }}>Ingresos Generados</th>
+                                        <th style={{ padding: '1rem 2rem', textAlign: 'right', fontSize: '0.85rem', fontWeight: '700', color: 'hsl(var(--muted-foreground))' }}>Ganancia</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -417,11 +423,14 @@ export default function Reports() {
                                                 <td style={{ padding: '1rem 2rem', textAlign: 'right', fontWeight: '700', color: 'hsl(var(--primary))' }}>
                                                     Bs. {item.total_revenue.toLocaleString('es-BO', { minimumFractionDigits: 2 })}
                                                 </td>
+                                                <td style={{ padding: '1rem 2rem', textAlign: 'right', fontWeight: '600' }}>
+                                                    Bs. {(item.total_profit ?? 0).toLocaleString('es-BO', { minimumFractionDigits: 2 })}
+                                                </td>
                                             </tr>
                                         ))
                                     ) : (
                                         <tr>
-                                            <td colSpan="3" style={{ padding: '3rem', textAlign: 'center', color: 'hsl(var(--muted-foreground))' }}>
+                                            <td colSpan="4" style={{ padding: '3rem', textAlign: 'center', color: 'hsl(var(--muted-foreground))' }}>
                                                 No hay datos disponibles para el periodo seleccionado.
                                             </td>
                                         </tr>

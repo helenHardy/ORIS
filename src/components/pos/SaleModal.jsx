@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { X, Save, Plus, Trash2, Search, Loader2, AlertCircle, Building2, User, Package, Calculator, Info, ChevronRight, Box, Printer, ClipboardList, Tag } from 'lucide-react'
+import { X, Save, Plus, Trash2, Search, Loader2, AlertCircle, Building2, User, Package, Calculator, Info, ChevronRight, ChevronDown, Box, Printer, ClipboardList, Tag, UserPlus, ArrowRight, RefreshCw } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 
 export default function SaleModal({ onClose, onSave, isSaving, initialData, currencySymbol = 'Bs.', readOnly = false }) {
@@ -12,15 +12,22 @@ export default function SaleModal({ onClose, onSave, isSaving, initialData, curr
     const [discount, setDiscount] = useState(initialData?.discount || 0)
     const [tax, setTax] = useState(initialData?.tax || 0)
     const [error, setError] = useState(null)
+    const [customerSearch, setCustomerSearch] = useState('')
+    const [showCustomerSearch, setShowCustomerSearch] = useState(false)
+    const [isLoadingCustomers, setIsLoadingCustomers] = useState(false)
+    const [isCreatingCustomer, setIsCreatingCustomer] = useState(false)
+    const [newCustomerData, setNewCustomerData] = useState({ name: '', tax_id: '', email: '', phone: '' })
 
     useEffect(() => {
         async function fetchInitialData() {
+            setIsLoadingCustomers(true)
             const [customersRes, branchesRes, productsRes] = await Promise.all([
                 supabase.from('customers').select('*').eq('active', true).order('name'),
                 supabase.from('branches').select('*').eq('active', true).order('name'),
                 supabase.from('products').select('*, settings:product_branch_settings(*)').order('name')
             ])
             setCustomers(customersRes.data || [])
+            setIsLoadingCustomers(false)
             setBranches(branchesRes.data || [])
             setProducts(productsRes.data || [])
 
@@ -126,6 +133,45 @@ export default function SaleModal({ onClose, onSave, isSaving, initialData, curr
         })
     }
 
+    const filteredCustomers = customers.filter(c =>
+        (c.name?.toLowerCase() || '').includes(customerSearch.toLowerCase()) ||
+        (c.tax_id?.toLowerCase() || '').includes(customerSearch.toLowerCase())
+    )
+
+    const startCreateCustomer = () => {
+        const isNumeric = /^\d+$/.test(customerSearch)
+        setNewCustomerData({
+            name: !isNumeric ? customerSearch : '',
+            tax_id: isNumeric ? customerSearch : '',
+            email: '',
+            phone: ''
+        })
+        setIsCreatingCustomer(true)
+    }
+
+    const handleCreateCustomer = async () => {
+        if (!newCustomerData.name.trim()) return alert('El nombre es obligatorio')
+        try {
+            const { data, error } = await supabase.from('customers').insert([{
+                name: newCustomerData.name,
+                tax_id: newCustomerData.tax_id,
+                email: newCustomerData.email,
+                phone: newCustomerData.phone,
+                active: true
+            }]).select().single()
+            if (error) throw error
+            const updated = [...customers, data].sort((a, b) => a.name.localeCompare(b.name))
+            setCustomers(updated)
+            setSelectedCustomer(data.id)
+            setIsCreatingCustomer(false)
+            setNewCustomerData({ name: '', tax_id: '', email: '', phone: '' })
+            setShowCustomerSearch(false)
+        } catch (err) {
+            console.error(err)
+            alert('Error al crear cliente')
+        }
+    }
+
     const filteredProducts = products.filter(p => {
         const matchesSearch = (p.name?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
             (p.sku?.toLowerCase() || '').includes(searchTerm.toLowerCase())
@@ -174,19 +220,160 @@ export default function SaleModal({ onClose, onSave, isSaving, initialData, curr
                     <div style={{ display: 'grid', gridTemplateColumns: '320px 1fr', flex: 1, overflow: 'hidden' }}>
                         {/* Sidebar: Header Info */}
                         <div className="no-scrollbar" style={{ padding: '1.5rem', borderRight: '1px solid hsl(var(--border) / 0.4)', backgroundColor: 'hsl(var(--secondary) / 0.05)', display: 'flex', flexDirection: 'column', gap: '1.25rem', overflowY: 'auto' }}>
-                            <div>
+                            <div style={{ position: 'relative' }}>
                                 <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.75rem', fontWeight: '800', textTransform: 'uppercase', opacity: 0.5, marginBottom: '0.75rem' }}>
                                     <User size={14} /> Cliente
                                 </label>
-                                <select
-                                    disabled={readOnly}
-                                    style={{ width: '100%', padding: '0.85rem 1rem', backgroundColor: readOnly ? 'hsl(var(--secondary) / 0.1)' : 'white', borderRadius: '14px', border: '1px solid hsl(var(--border) / 0.6)', fontWeight: '700', fontSize: '0.9rem', outline: 'none' }}
-                                    value={selectedCustomer}
-                                    onChange={(e) => setSelectedCustomer(e.target.value)}
-                                >
-                                    <option value="">Cliente General</option>
-                                    {customers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                                </select>
+
+                                {readOnly ? (
+                                    <div style={{ width: '100%', padding: '0.85rem 1rem', backgroundColor: 'hsl(var(--secondary) / 0.1)', borderRadius: '14px', border: '1px solid hsl(var(--border) / 0.6)', fontWeight: '700', fontSize: '0.9rem' }}>
+                                        {customers.find(c => c.id === selectedCustomer)?.name || 'Cliente General'}
+                                    </div>
+                                ) : (
+                                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                        <button
+                                            type="button"
+                                            onClick={() => { setShowCustomerSearch(!showCustomerSearch); setIsCreatingCustomer(false); }}
+                                            style={{
+                                                flex: 1,
+                                                padding: '0.85rem 1rem',
+                                                backgroundColor: 'white',
+                                                borderRadius: '14px',
+                                                border: '1px solid hsl(var(--border) / 0.6)',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'space-between',
+                                                gap: '0.75rem',
+                                                cursor: 'pointer',
+                                                textAlign: 'left'
+                                            }}
+                                        >
+                                            <span style={{ fontWeight: '700', fontSize: '0.9rem', color: selectedCustomer ? 'hsl(var(--foreground))' : 'hsl(var(--foreground) / 0.4)' }}>
+                                                {customers.find(c => c.id === selectedCustomer)?.name || 'Cliente General'}
+                                            </span>
+                                            <ChevronDown size={18} opacity={0.3} />
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={startCreateCustomer}
+                                            style={{
+                                                padding: '0 1rem',
+                                                backgroundColor: 'hsl(var(--primary) / 0.1)',
+                                                border: '1px solid hsl(var(--primary) / 0.2)',
+                                                borderRadius: '14px',
+                                                color: 'hsl(var(--primary))',
+                                                cursor: 'pointer',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                gap: '0.5rem'
+                                            }}
+                                        >
+                                            <UserPlus size={18} />
+                                            <span style={{ fontSize: '0.7rem', fontWeight: '800' }}>NUEVO</span>
+                                        </button>
+                                    </div>
+                                )}
+
+                                {showCustomerSearch && !readOnly && (
+                                    <div className="card shadow-2xl" style={{ position: 'absolute', top: '100%', left: 0, width: '100%', zIndex: 120, marginTop: '0.5rem', padding: 0, overflow: 'hidden', borderRadius: '16px', border: '1px solid hsl(var(--border) / 0.6)' }}>
+                                        {!isCreatingCustomer ? (
+                                            <>
+                                                <div style={{ padding: '0.75rem', borderBottom: '1px solid hsl(var(--border) / 0.2)', backgroundColor: 'hsl(var(--secondary) / 0.1)' }}>
+                                                    <div style={{ position: 'relative' }}>
+                                                        <Search size={16} style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', opacity: 0.4 }} />
+                                                        <input
+                                                            autoFocus
+                                                            placeholder="Buscar por nombre o NIT..."
+                                                            style={{ width: '100%', padding: '0.5rem 0.75rem 0.5rem 2.25rem', backgroundColor: 'white', borderRadius: '10px', border: '1px solid hsl(var(--primary) / 0.2)', fontSize: '0.85rem', outline: 'none' }}
+                                                            value={customerSearch}
+                                                            onChange={(e) => setCustomerSearch(e.target.value)}
+                                                        />
+                                                    </div>
+                                                </div>
+                                                <div style={{ maxHeight: '200px', overflowY: 'auto' }}>
+                                                    <button
+                                                        type="button"
+                                                        className="btn"
+                                                        style={{ width: '100%', justifyContent: 'flex-start', padding: '0.75rem 1rem', borderRadius: 0, border: 'none', borderBottom: '1px solid hsl(var(--border) / 0.2)' }}
+                                                        onClick={() => { setSelectedCustomer(''); setShowCustomerSearch(false); }}
+                                                    >
+                                                        <User size={16} style={{ marginRight: '0.5rem', opacity: 0.5 }} />
+                                                        <span style={{ fontWeight: '700', fontSize: '0.85rem' }}>Cliente General / Final</span>
+                                                    </button>
+
+                                                    {isLoadingCustomers && (
+                                                        <div style={{ padding: '1.25rem', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem', opacity: 0.6 }}>
+                                                            <RefreshCw size={20} className="animate-spin" style={{ color: 'hsl(var(--primary))' }} />
+                                                            <p style={{ margin: 0, fontSize: '0.8rem', fontWeight: '700' }}>Buscando clientes...</p>
+                                                        </div>
+                                                    )}
+
+                                                    {!isLoadingCustomers && customerSearch.trim() !== '' && filteredCustomers.length === 0 && (
+                                                        <div style={{ padding: '1.25rem', textAlign: 'center' }}>
+                                                            <p style={{ margin: '0 0 0.75rem', fontSize: '0.8rem', fontWeight: '700', opacity: 0.6 }}>
+                                                                No se encontró cliente para <b>"{customerSearch}"</b>
+                                                            </p>
+                                                            <button
+                                                                type="button"
+                                                                className="btn btn-primary"
+                                                                onClick={startCreateCustomer}
+                                                                style={{ width: '100%', gap: '0.5rem', padding: '0.6rem', fontSize: '0.85rem', fontWeight: '800' }}
+                                                            >
+                                                                <UserPlus size={16} /> Crear cliente "{customerSearch}"
+                                                            </button>
+                                                        </div>
+                                                    )}
+
+                                                    {!isLoadingCustomers && filteredCustomers.map(c => (
+                                                        <button
+                                                            key={c.id}
+                                                            type="button"
+                                                            className="btn"
+                                                            style={{ width: '100%', justifyContent: 'flex-start', padding: '0.75rem 1rem', borderRadius: 0, border: 'none', borderBottom: '1px solid hsl(var(--border) / 0.2)' }}
+                                                            onClick={() => { setSelectedCustomer(c.id); setShowCustomerSearch(false); }}
+                                                        >
+                                                            <div style={{ textAlign: 'left', flex: 1 }}>
+                                                                <div style={{ fontWeight: '800', fontSize: '0.85rem' }}>{c.name}</div>
+                                                                <div style={{ fontSize: '0.7rem', opacity: 0.5 }}>NIT: {c.tax_id || '---'}</div>
+                                                            </div>
+                                                            <ArrowRight size={14} opacity={0.3} />
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            </>
+                                        ) : (
+                                            <div style={{ padding: '1.25rem', backgroundColor: 'hsl(var(--secondary) / 0.1)' }}>
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
+                                                    <h4 style={{ margin: 0, fontSize: '0.9rem', fontWeight: '800' }}>Nuevo Cliente</h4>
+                                                    <button onClick={() => setIsCreatingCustomer(false)} className="btn" style={{ padding: '0.3rem', borderRadius: '50%' }}><X size={14} /></button>
+                                                </div>
+                                                <div style={{ display: 'grid', gap: '0.75rem' }}>
+                                                    <input
+                                                        placeholder="Nombre *"
+                                                        value={newCustomerData.name}
+                                                        onChange={e => setNewCustomerData({ ...newCustomerData, name: e.target.value })}
+                                                        style={{ width: '100%', padding: '0.6rem', borderRadius: '8px', border: '1px solid hsl(var(--border))', fontSize: '0.85rem' }}
+                                                        autoFocus
+                                                    />
+                                                    <input
+                                                        placeholder="NIT / CI"
+                                                        value={newCustomerData.tax_id}
+                                                        onChange={e => setNewCustomerData({ ...newCustomerData, tax_id: e.target.value })}
+                                                        style={{ width: '100%', padding: '0.6rem', borderRadius: '8px', border: '1px solid hsl(var(--border))', fontSize: '0.85rem' }}
+                                                    />
+                                                    <button
+                                                        type="button"
+                                                        className="btn btn-primary"
+                                                        onClick={handleCreateCustomer}
+                                                        style={{ padding: '0.6rem', fontWeight: '800', fontSize: '0.85rem' }}
+                                                    >
+                                                        Guardar
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
                             </div>
 
                             <div>
