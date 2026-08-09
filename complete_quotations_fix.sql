@@ -69,3 +69,13 @@ ALTER TABLE public.quotations ENABLE ROW LEVEL SECURITY;
 -- Add Permissions (just in case they were missing)
 DROP POLICY IF EXISTS "Permitir todo a usuarios autenticados" ON public.quotations;
 CREATE POLICY "Permitir todo a usuarios autenticados" ON public.quotations FOR ALL USING (auth.role() = 'authenticated');
+
+-- ==========================================
+-- quotation_items: ensure is_damaged exists
+-- ==========================================
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'quotation_items' AND column_name = 'is_damaged') THEN
+        ALTER TABLE public.quotation_items ADD COLUMN is_damaged boolean DEFAULT false;
+    END IF;
+END $$;

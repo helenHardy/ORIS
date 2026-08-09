@@ -4,7 +4,7 @@ import { supabase } from '../../lib/supabase'
 import ProductGrid from './ProductGrid'
 import Cart from './Cart'
 
-export default function QuotationPOS({ initialData, isSaving, onClose, onSave, currencySymbol = 'Bs.' }) {
+export default function QuotationPOS({ initialData, isSaving, onClose, onSave, onConvert, convertMode = false, currencySymbol = 'Bs.' }) {
     const [cart, setCart] = useState(initialData?.items || [])
     const [searchTerm, setSearchTerm] = useState('')
     const [debouncedSearch, setDebouncedSearch] = useState('')
@@ -12,7 +12,7 @@ export default function QuotationPOS({ initialData, isSaving, onClose, onSave, c
     const [selectedBranchId, setSelectedBranchId] = useState(initialData?.branch_id || null)
     const [customers, setCustomers] = useState([])
     const [selectedCustomer, setSelectedCustomer] = useState(initialData?.customer_id || '')
-    const [validUntil, setValidUntil] = useState(initialData?.valid_until || new Date(Date.now() + 15 * 24 * 60 * 60 * 1000).toISOString().split('T')[0])
+    const [validUntil, setValidUntil] = useState(initialData?.valid_until || '')
     const [notes, setNotes] = useState(initialData?.notes || '')
     const [discount, setDiscount] = useState(initialData?.discount || 0)
     const [tax, setTax] = useState(initialData?.tax || 0)
@@ -28,12 +28,14 @@ export default function QuotationPOS({ initialData, isSaving, onClose, onSave, c
     }, [searchTerm])
 
     useEffect(() => {
-        fetchBranches()
-        fetchCustomers()
-        fetchCategories()
-    }, [])
+        if (!initialData?.valid_until) {
+            const defaultDate = new Date(Date.now() + 15 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+            // eslint-disable-next-line react-hooks/set-state-in-effect
+            setValidUntil(defaultDate)
+        }
+    }, [initialData?.valid_until])
 
-    async function fetchBranches() {
+    const fetchBranches = useCallback(async () => {
         const { data: { user } } = await supabase.auth.getUser()
         if (!user) return
         const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).maybeSingle()
@@ -51,17 +53,25 @@ export default function QuotationPOS({ initialData, isSaving, onClose, onSave, c
             const defaultId = initialData?.branch_id || data[0].id
             setSelectedBranchId(defaultId)
         }
-    }
+    }, [initialData?.branch_id])
 
-    async function fetchCustomers() {
+    const fetchCustomers = useCallback(async () => {
         const { data } = await supabase.from('customers').select('*').eq('active', true).order('name')
         setCustomers(data || [])
-    }
+    }, [])
 
-    async function fetchCategories() {
+    const fetchCategories = useCallback(async () => {
         const { data } = await supabase.from('categories').select('name').order('name')
         if (data) setCategories(['Todos', ...data.map(c => c.name)])
-    }
+    }, [])
+
+    useEffect(() => {
+        /* eslint-disable react-hooks/set-state-in-effect */
+        fetchBranches()
+        fetchCustomers()
+        fetchCategories()
+        /* eslint-enable react-hooks/set-state-in-effect */
+    }, [fetchBranches, fetchCustomers, fetchCategories])
 
     const getEffectivePrice = useCallback((product, quantity) => {
         const rules = product.tiered_rules || []
@@ -124,12 +134,15 @@ export default function QuotationPOS({ initialData, isSaving, onClose, onSave, c
                     return item
                 }
 
-                const newPrice = isNowDamaged ? (item.price * 0.5) : (item.base_price || item.price)
+                const baseForPrice = item.base_price || item.price
+                const newPrice = isNowDamaged
+                    ? getEffectivePrice({ ...item, price: baseForPrice * 0.5 }, item.quantity)
+                    : getEffectivePrice({ ...item, price: baseForPrice }, item.quantity)
                 return { ...item, is_damaged: isNowDamaged, price: newPrice }
             }
             return item
         }))
-    }, [])
+    }, [getEffectivePrice])
 
     const updateQuantity = useCallback((productId, delta) => {
         setCart(prev => prev.map(item => {
@@ -177,20 +190,23 @@ export default function QuotationPOS({ initialData, isSaving, onClose, onSave, c
         setError(null)
         if (!selectedBranchId) return setError('Seleccione una sucursal')
         if (cart.length === 0) return setError('Agregue al menos un producto')
-        onSave({
+        const payload = {
             customer_id: selectedCustomer || null,
             branch_id: selectedBranchId,
             valid_until: validUntil,
             notes,
             discount: parseFloat(discount || 0),
             tax: parseFloat(tax || 0)
-        }, cart.map(item => ({
+        }
+        const items = cart.map(item => ({
             product_id: item.id,
             quantity: item.quantity,
             price: item.price,
             total: item.price * item.quantity,
             is_damaged: !!item.is_damaged
-        })))
+        }))
+        if (convertMode && onConvert) onConvert(payload, items)
+        else onSave(payload, items)
     }
 
     return (
@@ -210,9 +226,17 @@ export default function QuotationPOS({ initialData, isSaving, onClose, onSave, c
                         </div>
                         <div>
                             <h1 style={{ fontSize: '1.4rem', fontWeight: '900', margin: 0, letterSpacing: '-0.03em' }}>
-                                {initialData ? `Editar Cotización #${initialData.quotation_number || ''}` : 'Nueva Cotización'}
+                                {initialData
+                                    ? (convertMode
+                                        ? `Convertir Cotización #${initialData.quotation_number || ''}`
+                                        : `Editar Cotización #${initialData.quotation_number || ''}`)
+                                    : 'Nueva Cotización'}
                             </h1>
-                            <p style={{ fontSize: '0.8rem', fontWeight: '500', opacity: 0.5, margin: 0 }}>Selecciona productos del catálogo para armar la cotización</p>
+                            <p style={{ fontSize: '0.8rem', fontWeight: '500', opacity: 0.5, margin: 0 }}>
+                                {convertMode
+                                    ? 'Revisa y modifica los productos antes de convertir la cotización en venta'
+                                    : 'Selecciona productos del catálogo para armar la cotización'}
+                            </p>
                         </div>
                     </div>
                     <button onClick={onClose} className="btn" style={{ padding: '0.5rem', borderRadius: '50%', backgroundColor: 'hsl(var(--secondary) / 0.5)' }} disabled={isSaving}>
@@ -428,8 +452,18 @@ export default function QuotationPOS({ initialData, isSaving, onClose, onSave, c
                         onClick={handleSubmit}
                         disabled={cart.length === 0 || isSaving}
                     >
-                        {isSaving ? <><Loader2 className="animate-spin" /> GUARDANDO...</> : <><Save /> GUARDAR COTIZACIÓN</>}
+                        {isSaving
+                            ? <><Loader2 className="animate-spin" /> GUARDANDO...</>
+                            : convertMode
+                                ? <><ShoppingCart /> GUARDAR Y CONVERTIR A VENTA</>
+                                : <><Save /> GUARDAR COTIZACIÓN</>}
                     </button>
+
+                    {convertMode && (
+                        <p style={{ textAlign: 'center', marginTop: '0.6rem', fontSize: '0.7rem', opacity: 0.5, fontWeight: '700' }}>
+                            Se guardarán los cambios y se abrirá el cobro para convertir en venta.
+                        </p>
+                    )}
 
                     <p style={{ textAlign: 'center', marginTop: '0.75rem', fontSize: '0.7rem', opacity: 0.4, fontWeight: '600' }}>
                         SISTEMA DE COTIZACIONES v2.0

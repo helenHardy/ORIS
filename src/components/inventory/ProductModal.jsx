@@ -376,7 +376,7 @@ export default function ProductModal({ product, onClose, onSave, isSaving, curre
             zIndex: 100,
             padding: '1rem'
         }}>
-            <div className="card shadow-2xl" style={{
+            <div className="card shadow-2xl pm-modal" style={{
                 width: '100%',
                 maxWidth: '950px',
                 padding: 0,
@@ -389,8 +389,8 @@ export default function ProductModal({ product, onClose, onSave, isSaving, curre
                 border: '1px solid hsl(var(--border))'
             }}>
                 {/* Header */}
-                <div style={{
-                    padding: '1.5rem 2rem',
+                <div className="pm-header" style={{
+                    padding: '1.25rem 1.5rem',
                     borderBottom: '1px solid hsl(var(--border))',
                     display: 'flex',
                     justifyContent: 'space-between',
@@ -418,7 +418,7 @@ export default function ProductModal({ product, onClose, onSave, isSaving, curre
                     </button>
                 </div>
 
-                <div style={{ flex: 1, overflowY: 'auto', padding: '2rem' }}>
+                <div className="pm-body" style={{ flex: 1, overflowY: 'auto', padding: '1.5rem' }}>
                     {error && (
                         <div style={{ padding: '1rem', backgroundColor: 'hsl(var(--destructive) / 0.1)', color: 'hsl(var(--destructive))', borderRadius: '12px', marginBottom: '1.5rem', fontSize: '0.875rem', display: 'flex', alignItems: 'center', gap: '0.75rem', border: '1px solid hsl(var(--destructive) / 0.2)' }}>
                             <AlertCircle size={18} />
@@ -426,14 +426,14 @@ export default function ProductModal({ product, onClose, onSave, isSaving, curre
                         </div>
                     )}
 
-                    <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '2.5rem' }}>
+                    <form onSubmit={handleSubmit} className="pm-form" style={{ display: 'flex', flexDirection: 'column', gap: '1.75rem' }}>
 
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(12, 1fr)', gap: '2rem' }}>
+                        <div className="pm-main" style={{ display: 'grid', gridTemplateColumns: 'repeat(12, 1fr)', gap: '1.5rem' }}>
 
                             {/* Left Column: Media & Primary Details */}
-                            <div style={{ gridColumn: 'span 12', display: 'grid', gridTemplateColumns: 'repeat(12, 1fr)', gap: '2rem' }}>
+                            <div className="pm-top" style={{ gridColumn: 'span 12', display: 'grid', gridTemplateColumns: 'repeat(12, 1fr)', gap: '1.5rem' }}>
 
-                                <div style={{ gridColumn: 'span 4' }}>
+                                <div className="pm-media" style={{ gridColumn: 'span 4' }}>
                                     <h3 style={sectionTitleStyle}><ImageIcon size={18} /> Multimedia</h3>
                                     <div style={{
                                         width: '100%',
@@ -562,7 +562,7 @@ export default function ProductModal({ product, onClose, onSave, isSaving, curre
                                     <p style={{ fontSize: '0.7rem', opacity: 0.5, marginTop: '0.75rem', textAlign: 'left' }}>Formatos soportados: JPG, PNG, WebP (Máx 5MB). La primera imagen será la principal.</p>
                                 </div>
 
-                                <div style={{ gridColumn: 'span 8', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                                <div className="pm-info" style={{ gridColumn: 'span 8', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
                                     <h3 style={sectionTitleStyle}><Info size={18} /> Información General</h3>
 
                                     <div style={inputWrapperStyle}>
@@ -579,7 +579,7 @@ export default function ProductModal({ product, onClose, onSave, isSaving, curre
                                         />
                                     </div>
 
-                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
+                                    <div className="pm-fields" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.25rem' }}>
                                         <div style={inputWrapperStyle}>
                                             <label style={labelStyle}>SKU / Código</label>
                                             <div style={{ display: 'flex', alignItems: 'center', position: 'relative' }}>
@@ -667,7 +667,7 @@ export default function ProductModal({ product, onClose, onSave, isSaving, curre
                             </div>
 
                             {/* Middle Section: Categorization */}
-                            <div style={{ gridColumn: 'span 12', padding: '1.5rem', backgroundColor: 'hsl(var(--secondary) / 0.1)', borderRadius: '16px', display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1.5rem' }}>
+                            <div className="pm-cat" style={{ gridColumn: 'span 12', padding: '1.25rem', backgroundColor: 'hsl(var(--secondary) / 0.1)', borderRadius: '16px', display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1.25rem' }}>
 
                                 <div style={inputWrapperStyle}>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -729,7 +729,7 @@ export default function ProductModal({ product, onClose, onSave, isSaving, curre
 
 
                             {/* Bottom Section: Branch Settings */}
-                            <div style={{ gridColumn: 'span 12' }}>
+                            <div className="pm-branch-wrap" style={{ gridColumn: 'span 12' }}>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
                                     <h3 style={{ ...sectionTitleStyle, marginBottom: 0 }}><Building2 size={18} /> Stock y Precios por Sucursal</h3>
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', backgroundColor: 'hsl(var(--secondary) / 0.1)', padding: '0.4rem 0.8rem', borderRadius: '8px' }}>
@@ -748,14 +748,14 @@ export default function ProductModal({ product, onClose, onSave, isSaving, curre
                                 {loadingBranches ? (
                                     <div style={{ textAlign: 'center', padding: '2rem' }}><Loader2 size={32} className="animate-spin" style={{ color: 'hsl(var(--primary))' }} /></div>
                                 ) : (
-                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                                    <div className="pm-branches" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                                         {branchSettings.map(s => (
                                             <div key={s.branch_id} style={{ padding: '1.25rem', backgroundColor: 'hsl(var(--background))', borderRadius: '12px', border: '1px solid hsl(var(--border))', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                                                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', borderBottom: '1px solid hsl(var(--border))', paddingBottom: '0.75rem' }}>
                                                     <Building2 size={16} style={{ opacity: 0.5 }} />
                                                     <span style={{ fontSize: '0.9rem', fontWeight: '700' }}>{s.branch_name}</span>
                                                 </div>
-                                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.75rem' }}>
+                                                <div className="pm-bfields" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.75rem' }}>
                                                     <div style={inputWrapperStyle}>
                                                         <label style={labelStyle}>Stock</label>
                                                         <input
@@ -834,20 +834,21 @@ export default function ProductModal({ product, onClose, onSave, isSaving, curre
                         </div>
 
                         {/* Actions Footer */}
-                        <div style={{
-                            padding: '1.5rem 0',
+                        <div className="pm-actions" style={{
+                            padding: '1.25rem 0',
                             borderTop: '1px solid hsl(var(--border))',
                             display: 'flex',
                             gap: '1rem',
                             justifyContent: 'flex-end',
-                            marginTop: '1rem'
+                            marginTop: '1rem',
+                            flexWrap: 'wrap'
                         }}>
                             <button
                                 type="button"
                                 onClick={onClose}
                                 className="btn btn-secondary"
                                 disabled={isSaving}
-                                style={{ padding: '0.75rem 2rem', fontWeight: '600' }}
+                                style={{ padding: '0.75rem 1.5rem', fontWeight: '600' }}
                             >
                                 Cancelar
                             </button>
@@ -856,7 +857,7 @@ export default function ProductModal({ product, onClose, onSave, isSaving, curre
                                     type="submit"
                                     className="btn btn-primary"
                                     disabled={isSaving}
-                                    style={{ padding: '0.75rem 3rem', fontWeight: '700', minWidth: '200px', display: 'flex', gap: '0.75rem', alignItems: 'center', justifyContent: 'center' }}
+                                    style={{ padding: '0.75rem 2rem', fontWeight: '700', minWidth: '180px', display: 'flex', gap: '0.75rem', alignItems: 'center', justifyContent: 'center' }}
                                 >
                                     {isSaving ? (
                                         <>
@@ -875,6 +876,32 @@ export default function ProductModal({ product, onClose, onSave, isSaving, curre
                     </form>
                 </div >
             </div >
+
+            <style>{`
+                .pm-modal { max-width: 950px; }
+                @media (max-width: 900px) {
+                    .pm-modal { max-width: 95vw !important; }
+                    .pm-body { padding: 1.25rem !important; }
+                    .pm-header { padding: 1rem 1.25rem !important; }
+                    .pm-header h2 { font-size: 1.05rem !important; }
+                    .pm-form { gap: 1.5rem !important; }
+                    .pm-main, .pm-top { gap: 1.25rem !important; }
+                    .pm-media { grid-column: span 12 !important; }
+                    .pm-info { grid-column: span 12 !important; }
+                    .pm-fields { grid-template-columns: 1fr 1fr !important; }
+                    .pm-cat { grid-template-columns: repeat(2, 1fr) !important; gap: 1rem !important; padding: 1.25rem !important; }
+                    .pm-branches { grid-template-columns: 1fr !important; }
+                    .pm-bfields { grid-template-columns: repeat(2, 1fr) !important; }
+                }
+                @media (max-width: 560px) {
+                    .pm-fields { grid-template-columns: 1fr !important; }
+                    .pm-cat { grid-template-columns: 1fr !important; }
+                    .pm-bfields { grid-template-columns: 1fr !important; }
+                    .pm-body { padding: 1rem !important; }
+                    .pm-media .thumbnail-list { justify-content: center; }
+                    .pm-actions button { flex: 1; }
+                }
+            `}</style>
         </div >
     )
 }

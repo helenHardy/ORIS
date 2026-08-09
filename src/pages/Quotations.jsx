@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react'
-import { printHTML } from '../lib/print'
+import { printPDF } from '../lib/print'
 import Pagination from '../components/common/Pagination'
 import {
     Search,
@@ -34,6 +34,8 @@ export default function Quotations() {
     const [searchTerm, setSearchTerm] = useState('')
     const [isModalOpen, setIsModalOpen] = useState(false)
     const [editingQuotation, setEditingQuotation] = useState(null)
+    const editingRef = useRef(null)
+    const [isConvertMode, setIsConvertMode] = useState(false)
     const [isSaving, setIsSaving] = useState(false)
     const [isCheckoutOpen, setIsCheckoutOpen] = useState(false)
     const [convertingQuotation, setConvertingQuotation] = useState(null)
@@ -199,37 +201,44 @@ export default function Quotations() {
 
     const openNew = () => {
         setEditingQuotation(null)
+        editingRef.current = null
+        setIsConvertMode(false)
         setIsModalOpen(true)
     }
 
-    const openEdit = async (quotation) => {
+    const loadQuotationItems = async (quotation) => {
+        const { data: items } = await supabase
+            .from('quotation_items')
+            .select('*, products(id, name, sku, image_url, unit_of_measure, price)')
+            .eq('quotation_id', quotation.id)
+
+        if (items && items.length > 0) {
+            return items.map(item => ({
+                id: item.product_id,
+                product_id: item.product_id,
+                name: item.products?.name,
+                sku: item.products?.sku,
+                image_url: item.products?.image_url,
+                unit_of_measure: item.products?.unit_of_measure,
+                quantity: item.quantity,
+                price: item.price,
+                total: item.price * item.quantity,
+                base_price: item.products?.price || item.price,
+                is_damaged: !!item.is_damaged,
+                stock: Infinity,
+                damaged_stock: Infinity
+            }))
+        }
+        return []
+    }
+
+    const openEdit = async (quotation, convertMode = false) => {
         try {
             setLoading(true)
-            const { data: items } = await supabase
-                .from('quotation_items')
-                .select('*, products(id, name, sku, image_url, unit_of_measure, price)')
-                .eq('quotation_id', quotation.id)
-
-            if (items && items.length > 0) {
-                const mapped = items.map(item => ({
-                    id: item.product_id,
-                    product_id: item.product_id,
-                    name: item.products?.name,
-                    sku: item.products?.sku,
-                    image_url: item.products?.image_url,
-                    unit_of_measure: item.products?.unit_of_measure,
-                    quantity: item.quantity,
-                    price: item.price,
-                    total: item.price * item.quantity,
-                    base_price: item.products?.price || item.price,
-                    is_damaged: !!item.is_damaged,
-                    stock: Infinity,
-                    damaged_stock: Infinity
-                }))
-                setEditingQuotation({ ...quotation, items: mapped })
-            } else {
-                setEditingQuotation({ ...quotation, items: [] })
-            }
+            const mapped = await loadQuotationItems(quotation)
+            setEditingQuotation({ ...quotation, items: mapped })
+            editingRef.current = { ...quotation, items: mapped }
+            setIsConvertMode(convertMode)
             setIsModalOpen(true)
         } catch (err) {
             console.error('Error loading quotation items:', err)
@@ -243,6 +252,8 @@ export default function Quotations() {
         try {
             setIsSaving(true)
             const { data: { user } } = await supabase.auth.getUser()
+
+            const current = editingRef.current
 
             const subtotal = items.reduce((acc, item) => acc + (item.price * item.quantity), 0)
             const discount = parseFloat(formData.discount || 0)
@@ -258,17 +269,23 @@ export default function Quotations() {
                 discount,
                 tax,
                 total,
-                status: editingQuotation ? editingQuotation.status : 'Pendiente'
+                status: current ? current.status : 'Pendiente'
             }
 
-            let quotationId = editingQuotation?.id
+            let quotationId = current?.id
+            let updated = false
 
-            if (editingQuotation) {
-                const { error } = await supabase.from('quotations').update(quotationData).eq('id', editingQuotation.id)
+            if (current?.id) {
+                const { data: updatedRows, error } = await supabase.from('quotations').update(quotationData).eq('id', current.id).select('id')
                 if (error) throw error
-                // Delete old items and insert new ones
-                await supabase.from('quotation_items').delete().eq('quotation_id', editingQuotation.id)
-            } else {
+                updated = (updatedRows || []).length > 0
+                if (updated) {
+                    await supabase.from('quotation_items').delete().eq('quotation_id', current.id)
+                }
+            }
+
+            // If there was no quotation being edited (or it no longer exists), create a new one
+            if (!updated) {
                 const { data, error } = await supabase.from('quotations').insert([quotationData]).select().single()
                 if (error) throw error
                 quotationId = data.id
@@ -288,6 +305,7 @@ export default function Quotations() {
 
             setIsModalOpen(false)
             setEditingQuotation(null)
+            editingRef.current = null
             fetchQuotations()
         } catch (err) {
             console.error('Error saving quotation:', err)
@@ -297,7 +315,65 @@ export default function Quotations() {
         }
     }
 
+    const handleSaveThenConvert = async (formData, items) => {
+        const quotation = editingRef.current
+        try {
+            setIsSaving(true)
+            if (!quotation?.id) throw new Error('No se encontró la cotización a convertir.')
+            const { data: { user } } = await supabase.auth.getUser()
+
+            const subtotal = items.reduce((acc, item) => acc + (item.price * item.quantity), 0)
+            const discount = parseFloat(formData.discount || 0)
+            const tax = parseFloat(formData.tax || 0)
+            const total = Math.max(0, subtotal + tax - discount)
+
+            const quotationData = {
+                ...formData,
+                customer_id: formData.customer_id ? parseInt(formData.customer_id) : null,
+                branch_id: formData.branch_id ? parseInt(formData.branch_id) : null,
+                user_id: user?.id,
+                subtotal,
+                discount,
+                tax,
+                total,
+                status: quotation?.status || 'Pendiente'
+            }
+
+            const { error } = await supabase.from('quotations').update(quotationData).eq('id', quotation.id)
+            if (error) throw error
+            await supabase.from('quotation_items').delete().eq('quotation_id', quotation.id)
+
+            const { error: itemsError } = await supabase.from('quotation_items').insert(
+                items.map(item => ({
+                    quotation_id: quotation.id,
+                    product_id: item.product_id,
+                    quantity: item.quantity,
+                    price: item.price,
+                    total: item.price * item.quantity,
+                    is_damaged: !!item.is_damaged
+                }))
+            )
+            if (itemsError) throw itemsError
+
+            setIsModalOpen(false)
+            setEditingQuotation(null)
+            editingRef.current = null
+            setIsConvertMode(false)
+
+            handleConvert({ ...quotation, ...quotationData })
+        } catch (err) {
+            console.error('Error saving quotation before conversion:', err)
+            alert('Error al guardar la cotización antes de convertir: ' + err.message)
+        } finally {
+            setIsSaving(false)
+        }
+    }
+
     const handleConvert = async (quotation) => {
+        if (quotation.customer_id) {
+            const { data: customer } = await supabase.from('customers').select('*').eq('id', quotation.customer_id).maybeSingle()
+            if (customer) quotation = { ...quotation, customers: customer }
+        }
         console.log('Converting quotation:', quotation)
         setConvertingQuotation(quotation)
         if (quotation.branch_id) {
@@ -324,11 +400,32 @@ export default function Quotations() {
     }
 
     const handleConfirmConversion = async (paymentData) => {
+        let quotation = null
+        let claimedByUs = false
+        let createdSaleId = null
         try {
             setIsSaving(true)
-            const quotation = convertingQuotation
+            quotation = convertingQuotation
 
-            // 1. Fetch items and current stock
+            if (quotation.status !== 'Pendiente') {
+                throw new Error('Esta cotización ya no está pendiente.')
+            }
+
+            // 1. Claim the quotation atomically to prevent double conversion
+            const { data: claimed, error: claimErr } = await supabase
+                .from('quotations')
+                .update({ status: 'Convertido' })
+                .eq('id', quotation.id)
+                .eq('status', 'Pendiente')
+                .select('id')
+
+            if (claimErr) throw claimErr
+            if (!claimed || claimed.length === 0) {
+                throw new Error('Esta cotización ya fue convertida a una venta.')
+            }
+            claimedByUs = true
+
+            // 2. Fetch items and current stock
             const { data: qItems, error: itemsFetchErr } = await supabase
                 .from('quotation_items')
                 .select('*, products(name)')
@@ -359,10 +456,13 @@ export default function Quotations() {
                 }
             }
 
-            // 2. Get current user
+            // 3. Get current user
             const { data: { user } } = await supabase.auth.getUser()
 
-            // 3. Insert into Sales
+            const discount = (quotation.discount || 0) + (paymentData.discount || 0)
+            const total = Math.max(0, (quotation.total || 0) - (paymentData.discount || 0))
+
+            // 4. Insert into Sales
             const { data: sale, error: saleErr } = await supabase
                 .from('sales')
                 .insert([{
@@ -370,20 +470,21 @@ export default function Quotations() {
                     branch_id: quotation.branch_id,
                     user_id: user.id,
                     subtotal: quotation.subtotal,
-                    discount: (quotation.discount || 0) + (paymentData.discount || 0),
+                    discount,
                     tax: quotation.tax || 0,
-                    total: quotation.total - (paymentData.discount || 0),
+                    total,
                     payment_method: paymentData.paymentMethod,
-                    amount_received: paymentData.amountPaid,
-                    amount_change: paymentData.change,
+                    amount_received: paymentData.isCredit ? 0 : (paymentData.amountPaid || total),
+                    amount_change: paymentData.isCredit ? 0 : (paymentData.change || 0),
                     is_credit: paymentData.isCredit,
-                    cash_box_id: paymentData.cashBoxId
+                    cash_box_id: paymentData.cashBoxId || null
                 }])
                 .select().single()
 
             if (saleErr) throw saleErr
+            createdSaleId = sale.id
 
-            // 4. Insert into Sale Items
+            // 5. Insert into Sale Items
             const { error: saleItemsErr } = await supabase
                 .from('sale_items')
                 .insert(qItems.map(item => ({
@@ -397,19 +498,17 @@ export default function Quotations() {
 
             if (saleItemsErr) throw saleItemsErr
 
-            // 5. Update Quotation Status
-            const { error: updateErr } = await supabase
-                .from('quotations')
-                .update({ status: 'Convertido' })
-                .eq('id', quotation.id)
-
-            if (updateErr) throw updateErr
-
             setIsCheckoutOpen(false)
             setConvertingQuotation(null)
             alert('¡Conversión exitosa! La cotización ahora es una venta.')
             fetchQuotations()
         } catch (err) {
+            if (createdSaleId) {
+                await supabase.from('sales').delete().eq('id', createdSaleId)
+            }
+            if (claimedByUs && quotation) {
+                await supabase.from('quotations').update({ status: 'Pendiente' }).eq('id', quotation.id)
+            }
             console.error('Error in conversion:', err)
             alert('Error al convertir: ' + err.message)
         } finally {
@@ -487,7 +586,7 @@ export default function Quotations() {
                             <h2>COTIZACIÓN</h2>
                             <p style="font-size: 14px; font-weight: 700; color: #111;">#${quotation.quotation_number}</p>
                             <p>Fecha: ${new Date(quotation.created_at).toLocaleDateString()}</p>
-                            <p>Válido hasta: ${new Date(quotation.valid_until).toLocaleDateString()}</p>
+                            <p>Válido hasta: ${quotation.valid_until ? new Date(quotation.valid_until).toLocaleDateString() : 'Especificar'}</p>
                         </div>
                     </div>
 
@@ -527,23 +626,23 @@ export default function Quotations() {
                         <div class="totals-box">
                             <div class="totals-row">
                                 <span>Subtotal</span>
-                                <span>${currencySymbol}${quotation.subtotal.toFixed(2)}</span>
+                                <span>${currencySymbol}${(quotation.subtotal || 0).toFixed(2)}</span>
                             </div>
-                            ${quotation.tax > 0 ? `
+                            ${(quotation.tax || 0) > 0 ? `
                                 <div class="totals-row">
                                     <span>Impuestos (+)</span>
-                                    <span>${currencySymbol}${quotation.tax.toFixed(2)}</span>
+                                    <span>${currencySymbol}${(quotation.tax || 0).toFixed(2)}</span>
                                 </div>
                             ` : ''}
-                            ${quotation.discount > 0 ? `
+                            ${(quotation.discount || 0) > 0 ? `
                                 <div class="totals-row" style="color: #ef4444;">
                                     <span>Descuento (-)</span>
-                                    <span>-${currencySymbol}${quotation.discount.toFixed(2)}</span>
+                                    <span>-${currencySymbol}${(quotation.discount || 0).toFixed(2)}</span>
                                 </div>
                             ` : ''}
                             <div class="totals-row final">
                                 <span>TOTAL</span>
-                                <span>${currencySymbol}${quotation.total.toFixed(2)}</span>
+                                <span>${currencySymbol}${(quotation.total || 0).toFixed(2)}</span>
                             </div>
                         </div>
                     </div>
@@ -562,7 +661,7 @@ export default function Quotations() {
                 </html>
             `
 
-            printHTML(html)
+            await printPDF(html, { filename: `Cotizacion_${quotation.quotation_number}.pdf` })
 
         } catch (err) {
             console.error('Error printing quotation:', err)
@@ -586,8 +685,6 @@ export default function Quotations() {
 
     const filteredQuotations = quotations
 
-    const today = getLocalDate(new Date())
-
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem', paddingBottom: '2rem' }}>
             {isModalOpen && (
@@ -595,8 +692,10 @@ export default function Quotations() {
                     initialData={editingQuotation}
                     isSaving={isSaving}
                     currencySymbol={currencySymbol}
-                    onClose={() => { setIsModalOpen(false); setEditingQuotation(null); }}
+                    convertMode={isConvertMode}
+                    onClose={() => { setIsModalOpen(false); setEditingQuotation(null); editingRef.current = null; setIsConvertMode(false); }}
                     onSave={handleSave}
+                    onConvert={handleSaveThenConvert}
                 />
             )}
 
@@ -632,6 +731,12 @@ export default function Quotations() {
                     </button>
                 </div>
             </div>
+
+            {error && (
+                <div style={{ padding: '1rem', backgroundColor: 'hsl(var(--destructive) / 0.1)', color: 'hsl(var(--destructive))', borderRadius: '16px', fontSize: '0.9rem', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '0.75rem', border: '1px solid hsl(var(--destructive) / 0.2)' }}>
+                    <X size={18} /> {error}
+                </div>
+            )}
 
             {/* Metrics Dashboard (Simplified for Quotes) */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1.5rem' }}>
@@ -831,7 +936,7 @@ export default function Quotations() {
                                     <td style={{ padding: '1.25rem', textAlign: 'right' }}>
                                         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
                                             {q.status === 'Pendiente' && (
-                                                <button onClick={() => handleConvert(q)} className="btn btn-primary" style={{ padding: '0.5rem', borderRadius: '10px' }} title="Convertir a Venta"><ShoppingCart size={18} /></button>
+                                                <button onClick={() => openEdit(q, true)} className="btn btn-primary" style={{ padding: '0.5rem', borderRadius: '10px' }} title="Revisar y Convertir a Venta"><ShoppingCart size={18} /></button>
                                             )}
                                             <button onClick={() => handlePrint(q)} className="btn" style={{ padding: '0.5rem', borderRadius: '10px', backgroundColor: 'hsl(var(--secondary) / 0.5)' }} title="Imprimir"><Printer size={18} /></button>
                                             {q.status === 'Pendiente' && (

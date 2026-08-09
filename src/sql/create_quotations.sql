@@ -25,6 +25,7 @@ CREATE TABLE IF NOT EXISTS quotation_items (
     quantity NUMERIC DEFAULT 1,
     price NUMERIC DEFAULT 0,
     total NUMERIC DEFAULT 0,
+    is_damaged BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 

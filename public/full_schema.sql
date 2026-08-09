@@ -258,6 +258,7 @@ CREATE TABLE IF NOT EXISTS public.quotation_items (
     quantity numeric NOT NULL,
     price numeric NOT NULL,
     total numeric NOT NULL,
+    is_damaged boolean DEFAULT false,
     created_at timestamp with time zone DEFAULT now()
 );
 

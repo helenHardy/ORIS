@@ -3,14 +3,14 @@ import { Search, ClipboardList, RefreshCw, AlertTriangle, Building2, Calendar, U
 import { supabase } from '../lib/supabase'
 import SaleModal from '../components/pos/SaleModal'
 import Ticket from '../components/pos/Ticket'
-import { printHTML } from '../lib/print'
+import { printPDF } from '../lib/print'
 import Pagination from '../components/common/Pagination'
 
 
 export default function Sales() {
     const [sales, setSales] = useState([])
     const [loading, setLoading] = useState(true)
-    const [error, setError] = useState(null)
+    const [, setError] = useState(null)
     const [searchTerm, setSearchTerm] = useState('')
     const [isModalOpen, setIsModalOpen] = useState(false)
     const [editingSale, setEditingSale] = useState(null)
@@ -51,6 +51,7 @@ export default function Sales() {
         const handleTicketEvent = (e) => handlePrint(e.detail)
         window.addEventListener('print-ticket', handleTicketEvent)
         return () => window.removeEventListener('print-ticket', handleTicketEvent)
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [])
 
     const getTimeBounds = (modeOverride, day = filterDay, month = filterMonth, year = filterYear, start = filterStartDate, end = filterEndDate) => {
@@ -279,7 +280,12 @@ export default function Sales() {
             // Wait for state to update and render before printing
             setTimeout(() => {
                 const printArea = ticketRef.current?.innerHTML || ''
-                printHTML(`<html><head><title>Ticket #${sale.sale_number}</title><style>body{margin:0;padding:0;}</style></head><body>${printArea}</body></html>`)
+                printPDF(`<html><head><title>Ticket #${sale.sale_number}</title><style>body{margin:0;padding:0;}</style></head><body>${printArea}</body></html>`, {
+                    filename: `Ticket_Venta_${sale.sale_number}.pdf`
+                }).catch(err => {
+                    console.error(err)
+                    alert('Error al generar el PDF del ticket')
+                })
             }, 100)
         } catch (err) {
             console.error(err)
